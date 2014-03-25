@@ -1,0 +1,3 @@
+version=3
+opts="uversionmangle=s/v//,filenamemangle=s/.*\/(.*)/seaborn-$1/" \
+ http://github.com/mwaskom/seaborn/releases .*archive/v?([\d\.rc]+).tar.gz

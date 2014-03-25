@@ -1,0 +1,5 @@
+seaborn (0.3.0-1) unstable; urgency=low
+
+  * Initial Debian packaging (Closes: #)
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Mon, 24 Mar 2014 23:29:45 -0400
