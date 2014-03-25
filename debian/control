@@ -6,7 +6,8 @@ Uploaders: Yaroslav Halchenko <debian@onerussian.com>, Michael Hanke <michael.ha
 Build-Depends: debhelper (>= 8), dh-python,
  python-setuptools, python3-setuptools,
  python-all (>= 2.6.6-3~), python3-all,
- python-nose, python3-nose
+ python-nose, python3-nose,
+ xvfb, xauth,
 Standards-Version: 3.9.5
 Homepage: https://github.com/mwaskom/seaborn
 Vcs-Browser: http://github.com/neurodebian/seaborn

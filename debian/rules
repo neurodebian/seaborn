@@ -8,4 +8,6 @@ export PYBUILD_TEST_NOSE=1
 %:
 	dh $@ --with python2,python3 --buildsystem=pybuild
 
+override_dh_auto_test:
+	xvfb-run --auto-servernum --server-num=20 dh_auto_test $@
 
