@@ -15,7 +15,7 @@ Build-Depends: debhelper (>= 8), dh-python,
  python-patsy,
  python3-numpy, python3-scipy,
  python3-pandas,
- python3-matplotlib, python3-tk,
+ python-matplotlib (<< 1.2.0~) | python3-matplotlib, python3-tk,
  python3-patsy,
 Standards-Version: 3.9.5
 Homepage: https://github.com/mwaskom/seaborn
