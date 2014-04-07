@@ -64,7 +64,6 @@ Depends: ${misc:Depends}, ${python3:Depends},
  python3-pandas,
  python3-matplotlib,
 Recommends:
- python3-statsmodels,
  python3-patsy,
 Description: statistical visualization library
  Seaborn is a library for making attractive and informative
