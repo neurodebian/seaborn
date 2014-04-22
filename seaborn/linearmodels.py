@@ -337,21 +337,24 @@ class _DiscretePlotter(_LinearPlotter):
             err_palette = self.err_palette
             label = self.hue_order[i]
             marker = self.markers[i]
+            markersize = np.pi * np.square(self.lw) * 2
             linestyle = self.linestyles[i]
+            z = i + 1
 
             # The error bars
             for j, (x, (low, high)) in enumerate(zip(pos, ci)):
                 ecolor = err_palette[j] if self.x_palette else err_palette[i]
-                ax.plot([x, x], [low, high], linewidth=self.lw, color=ecolor)
+                ax.plot([x, x], [low, high], linewidth=self.lw,
+                        color=ecolor, zorder=z)
 
             # The main plot
-            ax.scatter(pos, height, s=75, color=color, label=label,
-                       marker=marker)
+            ax.scatter(pos, height, s=markersize, color=color, label=label,
+                       marker=marker, zorder=z)
 
             # The join line
             if self.join:
                 ax.plot(pos, height, color=color,
-                        linewidth=self.lw, linestyle=linestyle)
+                        linewidth=self.lw, linestyle=linestyle, zorder=z)
 
         # Set the x limits
         xlim = (self.positions.min() + self.offset.min() - .3,
@@ -613,7 +616,7 @@ class _RegressionPlotter(_LinearPlotter):
             x, y = self.scatter_data
             ax.scatter(x, y, **kws)
         else:
-             # TODO abstraction
+            # TODO abstraction
             ci_kws = {"color": kws["color"]}
             ci_kws["linewidth"] = mpl.rcParams["lines.linewidth"] * 1.75
             kws.setdefault("s", 50)
@@ -833,6 +836,7 @@ def factorplot(x, y=None, hue=None, data=None, row=None, col=None,
                        row_order=row_order, col_order=col_order, dropna=dropna,
                        size=size, aspect=aspect, col_wrap=col_wrap,
                        legend=legend, legend_out=legend_out,
+                       sharex=sharex, sharey=sharey,
                        margin_titles=margin_titles)
 
     if kind == "auto":
@@ -1333,7 +1337,7 @@ def interactplot(x1, x2, y, data=None, filled=False, cmap="RdBu_r",
         scatter_kws = {}
     if not ("color" in scatter_kws or "c" in scatter_kws):
         scatter_kws["color"] = "#222222"
-    if not "alpha" in scatter_kws:
+    if "alpha" not in scatter_kws:
         scatter_kws["alpha"] = 0.75
 
     # Intialize the contour keyword dictionary
@@ -1402,7 +1406,7 @@ def interactplot(x1, x2, y, data=None, filled=False, cmap="RdBu_r",
 
 def corrplot(data, names=None, annot=True, sig_stars=True, sig_tail="both",
              sig_corr=True, cmap=None, cmap_range=None, cbar=True,
-             diag_names=True, ax=None, **kwargs):
+             diag_names=True, method=None, ax=None, **kwargs):
     """Plot a correlation matrix with colormap and r values.
 
     Parameters
@@ -1426,6 +1430,8 @@ def corrplot(data, names=None, annot=True, sig_stars=True, sig_tail="both",
         full range (-1, 1), or specify (min, max) values for the colormap.
     cbar : bool
         If true, plot the colorbar legend.
+    method: pearson | kendall | spearman
+        Correlation method to compute pairwise correlations.
     ax : matplotlib axis
         Axis to draw plot in.
     kwargs : other keyword arguments
@@ -1443,7 +1449,10 @@ def corrplot(data, names=None, annot=True, sig_stars=True, sig_tail="both",
         data = pd.DataFrame(data, columns=names, dtype=np.float)
 
     # Calculate the correlation matrix of the dataframe
-    corrmat = data.corr()
+    if method is None:
+        corrmat = data.corr()
+    else:
+        corrmat = data.corr(method=method)
 
     # Pandas will drop non-numeric columns; let's keep track of that operation
     names = corrmat.columns

@@ -12,6 +12,7 @@ _style_keys = (
     "axes.grid",
     "axes.axisbelow",
     "axes.linewidth",
+    "axes.labelcolor",
 
     "grid.color",
     "grid.linestyle",
@@ -148,13 +149,14 @@ def axes_style(style=None, rc=None):
 
     Examples
     --------
-    >>> axes_style("whitegrid")
+    >>> st = axes_style("whitegrid")
 
     >>> set_style("ticks", {"xtick.major.size": 8, "ytick.major.size": 8})
 
+    >>> import matplotlib.pyplot as plt
     >>> with axes_style("white"):
     ...     f, ax = plt.subplots()
-    ...     ax.plot(x, y)
+    ...     ax.plot(x, y)               # doctest: +SKIP
 
     See Also
     --------
@@ -188,6 +190,7 @@ def axes_style(style=None, rc=None):
         # Common parameters
         style_dict = {
             "text.color": dark_gray,
+            "axes.labelcolor": dark_gray,
             "legend.frameon": False,
             "legend.numpoints": 1,
             "legend.scatterpoints": 1,
@@ -320,13 +323,14 @@ def plotting_context(context=None, rc=None):
 
     Examples
     --------
-    >>> plotting_context("poster")
+    >>> c = plotting_context("poster")
 
-    >>> plotting_context("talk", {"lines.linewidth": 2})
+    >>> c = plotting_context("talk", {"lines.linewidth": 2})
 
+    >>> import matplotlib.pyplot as plt
     >>> with plotting_context("paper"):
     ...     f, ax = plt.subplots()
-    ...     ax.plot(x, y)
+    ...     ax.plot(x, y)                 # doctest: +SKIP
 
     See Also
     --------
