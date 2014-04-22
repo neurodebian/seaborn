@@ -2,6 +2,9 @@ seaborn (0.3.1-1) unstable; urgency=medium
 
   * New upstream release
     - absorbed all previously included patches
+  * debian/rules
+    - customize tests invocation for compatibility with nose on wheezy
+      (can't be invoked via python -m nose)
 
  -- Yaroslav Halchenko <debian@onerussian.com>  Mon, 21 Apr 2014 20:56:40 -0400
 
