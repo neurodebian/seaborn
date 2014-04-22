@@ -1,3 +1,10 @@
+seaborn (0.3.1-1) unstable; urgency=medium
+
+  * New upstream release
+    - absorbed all previously included patches
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Mon, 21 Apr 2014 20:56:40 -0400
+
 seaborn (0.3.0-1) unstable; urgency=low
 
   * Initial Debian packaging (Closes: #742573)
