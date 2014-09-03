@@ -2,7 +2,6 @@
 from __future__ import division
 import copy
 import itertools
-import warnings
 import numpy as np
 import pandas as pd
 from scipy.spatial import distance
@@ -22,7 +21,8 @@ from .external.six.moves import range
 from . import utils
 from . import algorithms as algo
 from .palettes import color_palette
-from .axisgrid import FacetGrid
+from .axisgrid import FacetGrid, PairGrid
+from .distributions import kdeplot
 
 
 class _LinearPlotter(object):
@@ -152,7 +152,11 @@ class _DiscretePlotter(_LinearPlotter):
                 color = color_palette()[0]
             palette = [color for _ in self.x_order]
         elif palette is None:
-            palette = color_palette(n_colors=n_hues)
+            current_palette = mpl.rcParams["axes.color_cycle"]
+            if len(current_palette) <= n_hues:
+                palette = color_palette("husl", n_hues)
+            else:
+                palette = color_palette(n_colors=n_hues)
         elif isinstance(palette, dict):
             palette = [palette[k] for k in hue_names]
             palette = color_palette(palette, n_hues)
@@ -238,6 +242,13 @@ class _DiscretePlotter(_LinearPlotter):
 
                 # This is where the main computation happens
                 height.append(self.estimator(y_data))
+
+                # Only bootstrap with multple values
+                if current_data.sum() < 2:
+                    ci.append((None, None))
+                    continue
+
+                # Get the confidence intervals
                 if self.ci is not None:
                     boots = algo.bootstrap(y_data, func=self.estimator,
                                            n_boot=self.n_boot,
@@ -273,8 +284,14 @@ class _DiscretePlotter(_LinearPlotter):
         if self.hue is not None:
             leg = ax.legend(loc="best", scatterpoints=1)
             if hasattr(self.hue, "name"):
-                leg.set_title(self.hue.name,
-                              prop={"size": mpl.rcParams["axes.labelsize"]})
+                leg.set_title(self.hue.name),
+
+                # Set the title size a roundabout way to maintain
+                # compatability with matplotlib 1.1
+                titlesize = mpl.rcParams["axes.labelsize"]
+                prop = mpl.font_manager.FontProperties(size=titlesize)
+                leg._legend_title_box._text.set_font_properties(prop)
+
         ax.xaxis.grid(False)
         ax.set_xticks(self.positions)
         ax.set_xticklabels(self.x_order)
@@ -305,6 +322,8 @@ class _DiscretePlotter(_LinearPlotter):
 
             # The error bars
             for x, (low, high) in zip(pos, ci):
+                if low is None:
+                    continue
                 ax.plot([x, x], [low, high], linewidth=self.lw, color=ecolor)
 
         # Set the x limits
@@ -343,6 +362,8 @@ class _DiscretePlotter(_LinearPlotter):
 
             # The error bars
             for j, (x, (low, high)) in enumerate(zip(pos, ci)):
+                if low is None:
+                    continue
                 ecolor = err_palette[j] if self.x_palette else err_palette[i]
                 ax.plot([x, x], [low, high], linewidth=self.lw,
                         color=ecolor, zorder=z)
@@ -376,7 +397,7 @@ class _RegressionPlotter(_LinearPlotter):
     def __init__(self, x, y, data=None, x_estimator=None, x_bins=None,
                  x_ci="ci", scatter=True, fit_reg=True, ci=95, n_boot=1000,
                  units=None, order=1, logistic=False, lowess=False,
-                 robust=False, x_partial=None, y_partial=None,
+                 robust=False, logx=False, x_partial=None, y_partial=None,
                  truncate=False, dropna=True, x_jitter=None, y_jitter=None,
                  color=None, label=None):
 
@@ -391,6 +412,7 @@ class _RegressionPlotter(_LinearPlotter):
         self.logistic = logistic
         self.lowess = lowess
         self.robust = robust
+        self.logx = logx
         self.truncate = truncate
         self.x_jitter = x_jitter
         self.y_jitter = y_jitter
@@ -398,7 +420,7 @@ class _RegressionPlotter(_LinearPlotter):
         self.label = label
 
         # Validate the regression options:
-        if sum((order > 1, logistic, robust, lowess)) > 1:
+        if sum((order > 1, logistic, robust, lowess, logx)) > 1:
             raise ValueError("Mutually exclusive regression options.")
 
         # Extract the data vals from the arguments or passed dataframe
@@ -498,6 +520,8 @@ class _RegressionPlotter(_LinearPlotter):
         elif self.robust:
             from statsmodels.api import RLM
             yhat, yhat_boots = self.fit_statsmodels(grid, RLM)
+        elif self.logx:
+            yhat, yhat_boots = self.fit_logx(grid)
         else:
             yhat, yhat_boots = self.fit_fast(grid)
 
@@ -553,6 +577,24 @@ class _RegressionPlotter(_LinearPlotter):
         from statsmodels.api import nonparametric
         grid, yhat = nonparametric.lowess(self.y, self.x).T
         return grid, yhat
+
+    def fit_logx(self, grid):
+        """Fit the model in log-space."""
+        X, y = np.c_[np.ones(len(self.x)), self.x], self.y
+        grid = np.c_[np.ones(len(grid)), np.log(grid)]
+
+        def reg_func(_x, _y):
+            _x = np.c_[_x[:, 0], np.log(_x[:, 1])]
+            return np.linalg.pinv(_x).dot(_y)
+
+        yhat = grid.dot(reg_func(X, y))
+        if self.ci is None:
+            return yhat, None
+
+        beta_boots = algo.bootstrap(X, y, func=reg_func,
+                                    n_boot=self.n_boot, units=self.units).T
+        yhat_boots = grid.dot(beta_boots).T
+        return yhat, yhat_boots
 
     def bin_predictor(self, bins):
         """Discretize a predictor by assigning value to closest bin."""
@@ -612,7 +654,8 @@ class _RegressionPlotter(_LinearPlotter):
     def scatterplot(self, ax, kws):
         """Draw the data."""
         if self.x_estimator is None:
-            kws.setdefault("alpha", .8)
+            if not hasattr(kws['color'], 'shape') or kws['color'].shape[1] < 4:
+                kws.setdefault("alpha", .8)
             x, y = self.scatter_data
             ax.scatter(x, y, **kws)
         else:
@@ -646,7 +689,7 @@ class _RegressionPlotter(_LinearPlotter):
         ax.set_xlim(*xlim)
 
 
-def lmplot(x, y, data, hue=None, col=None, row=None, palette="husl",
+def lmplot(x, y, data, hue=None, col=None, row=None, palette=None,
            col_wrap=None, size=5, aspect=1, sharex=True, sharey=True,
            hue_order=None, col_order=None, row_order=None, dropna=True,
            legend=True, legend_out=True, **kwargs):
@@ -698,13 +741,6 @@ def lmplot(x, y, data, hue=None, col=None, row=None, palette="husl",
     regplot : Axes-level function for plotting linear regressions.
 
     """
-
-    # Backwards-compatibility warning layer
-    if "color" in kwargs:
-        msg = "`color` is deprecated and will be removed; using `hue` instead."
-        warnings.warn(msg, UserWarning)
-        hue = kwargs.pop("color")
-
     # Reduce the dataframe to only needed columns
     # Otherwise when dropna is True we could lose data because it is missing
     # in a column that isn't relevant to this plot
@@ -733,6 +769,10 @@ def lmplot(x, y, data, hue=None, col=None, row=None, palette="husl",
 
     # Draw the regression plot on each facet
     facets.map_dataframe(regplot, x, y, **kwargs)
+
+    # Add a legend
+    if hue is not None and legend:
+        facets.add_legend()
     return facets
 
 
@@ -849,6 +889,11 @@ def factorplot(x, y=None, hue=None, data=None, row=None, col=None,
         else:
             kind = "point"
 
+    # Always use an x_order so that the plot is drawn properly when
+    # not all of the x variables are represented in each facet
+    if x_order is None:
+        x_order = np.sort(pd.unique(data[x]))
+
     # Draw the plot on each facet
     kwargs = dict(estimator=estimator, ci=ci, n_boot=n_boot, units=units,
                   x_order=x_order, hue_order=hue_order, hline=hline)
@@ -879,7 +924,7 @@ def factorplot(x, y=None, hue=None, data=None, row=None, col=None,
         facets.fig.tight_layout()
 
     if legend and (hue is not None) and (hue not in [x, row, col]):
-        facets.set_legend(title=hue, label_order=hue_order)
+        facets.add_legend(title=hue, label_order=hue_order)
 
     return facets
 
@@ -917,9 +962,8 @@ def barplot(x, y=None, hue=None, data=None, estimator=np.mean, hline=None,
 
     Returns
     -------
-    facet : FacetGrid
-        Returns the :class:`FacetGrid` instance with the plot on it
-        for further tweaking.
+    ax : Axes
+        Returns the matplotlib Axes with the plot on it for further tweaking.
 
 
     See Also
@@ -1006,7 +1050,7 @@ def pointplot(x, y, hue=None, data=None, estimator=np.mean, hline=None,
 def regplot(x, y, data=None, x_estimator=None, x_bins=None, x_ci=95,
             scatter=True, fit_reg=True, ci=95, n_boot=1000, units=None,
             order=1, logistic=False, lowess=False, robust=False,
-            x_partial=None, y_partial=None,
+            logx=False, x_partial=None, y_partial=None,
             truncate=False, dropna=True, x_jitter=None, y_jitter=None,
             xlabel=None, ylabel=None, label=None,
             color=None, scatter_kws=None, line_kws=None,
@@ -1060,6 +1104,8 @@ def regplot(x, y, data=None, x_estimator=None, x_bins=None, x_ci=95,
     robust : boolean, optional
         Fit a robust linear regression, which may be useful when the data
         appear to have outliers.
+    logx : boolean, optional
+        Fit the regression in log(x) space.
     {x, y}_partial : matrix or string(s) , optional
         Matrix with same first dimension as `x`, or column name(s) in `data`.
         These variables are treated as confounding and are removed from
@@ -1102,7 +1148,7 @@ def regplot(x, y, data=None, x_estimator=None, x_bins=None, x_ci=95,
     """
     plotter = _RegressionPlotter(x, y, data, x_estimator, x_bins, x_ci,
                                  scatter, fit_reg, ci, n_boot, units,
-                                 order, logistic, lowess, robust,
+                                 order, logistic, lowess, robust, logx,
                                  x_partial, y_partial, truncate, dropna,
                                  x_jitter, y_jitter, color, label)
 
@@ -1499,7 +1545,7 @@ def corrplot(data, names=None, annot=True, sig_stars=True, sig_tail="both",
 
 def symmatplot(mat, p_mat=None, names=None, cmap="Greys", cmap_range=None,
                cbar=True, annot=True, diag_names=True, ax=None, **kwargs):
-    """Plot a symettric matrix with colormap and statistic values."""
+    """Plot a symmetric matrix with colormap and statistic values."""
     if ax is None:
         ax = plt.gca()
 
@@ -1566,3 +1612,93 @@ def symmatplot(mat, p_mat=None, names=None, cmap="Greys", cmap_range=None,
     ax.grid(True, which="minor", linestyle="-")
 
     return ax
+
+
+def pairplot(data, hue=None, hue_order=None, palette=None,
+             vars=None, x_vars=None, y_vars=None,
+             kind="scatter", diag_kind="hist",
+             size=3, aspect=1, dropna=True,
+             plot_kws=None, diag_kws=None, grid_kws=None):
+    """Plot pairwise relationships in a dataset.
+
+    Parameters
+    ----------
+    data : DataFrame
+        Tidy (long-form) dataframe where each column is a variable and
+        each row is an observation.
+    hue : string (variable name), optional
+        Variable in ``data`` to map plot aspects to different colors.
+    hue_order : list of strings
+        Order for the levels of the hue variable in the palette
+    palette : dict or seaborn color palette
+        Set of colors for mapping the ``hue`` variable. If a dict, keys
+        should be values  in the ``hue`` variable.
+    vars : list of variable names, optional
+        Variables within ``data`` to use, otherwise use every column with
+        a numeric datatype.
+    {x, y}_vars : lists of variable names, optional
+        Variables within ``data`` to use separately for the rows and
+        columns of the figure; i.e. to make a non-square plot.
+    kind : {'scatter', 'reg'}, optional
+        Kind of plot for the non-identity relationships.
+    diag_kind : {'hist', 'kde'}, optional
+        Kind of plot for the diagonal subplots.
+    size : scalar, optional
+        Height (in inches) of each facet.
+    aspect : scalar, optional
+        Aspect * size gives the width (in inches) of each facet.
+    dropna : boolean, optional
+        Drop missing values from the data before plotting.
+    {plot, diag, grid}_kws : dicts, optional
+        Dictionaries of keyword arguments.
+
+    Returns
+    -------
+    grid : PairGrid
+        Returns the underlying ``PairGrid`` instance for further tweaking.
+
+    See Also
+    --------
+    PairGrid : Subplot grid for more flexible plotting of pairwise
+               relationships.
+
+    """
+    if plot_kws is None:
+        plot_kws = {}
+    if diag_kws is None:
+        diag_kws = {}
+    if grid_kws is None:
+        grid_kws = {}
+
+    # Set up the PairGrid
+    diag_sharey = diag_kind == "hist"
+    grid = PairGrid(data, vars=vars, x_vars=x_vars, y_vars=y_vars, hue=hue,
+                    hue_order=hue_order, palette=palette,
+                    diag_sharey=diag_sharey,
+                    size=size, aspect=aspect, dropna=dropna, **grid_kws)
+
+    # Maybe plot on the diagonal
+    if grid.square_grid:
+        if diag_kind == "hist":
+            grid.map_diag(plt.hist, **diag_kws)
+        elif diag_kind == "kde":
+            diag_kws["legend"] = False
+            grid.map_diag(kdeplot, **diag_kws)
+
+    # Maybe plot on the off-diagonals
+    if grid.square_grid and diag_kind is not None:
+        plotter = grid.map_offdiag
+    else:
+        plotter = grid.map
+
+    if kind == "scatter":
+        plot_kws.setdefault("edgecolor", "white")
+        plotter(plt.scatter, **plot_kws)
+    elif kind == "reg":
+        plotter(regplot, **plot_kws)
+
+    # Add a legend
+    if hue is not None:
+        grid.add_legend()
+
+    return grid

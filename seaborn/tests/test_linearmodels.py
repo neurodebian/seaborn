@@ -180,6 +180,20 @@ class TestRegressionPlotter(object):
         # Compare the vector of y_hat values
         npt.assert_array_almost_equal(yhat_poly, yhat_smod)
 
+    def test_regress_logx(self):
+
+        x = np.arange(1, 10)
+        y = np.arange(1, 10)
+        grid = np.linspace(1, 10, 100)
+        p = lm._RegressionPlotter(x, y, n_boot=self.n_boot)
+
+        yhat_lin, _ = p.fit_fast(grid)
+        yhat_log, _ = p.fit_logx(grid)
+
+        nt.assert_greater(yhat_lin[0], yhat_log[0])
+        nt.assert_greater(yhat_log[20], yhat_lin[20])
+        nt.assert_greater(yhat_lin[90], yhat_log[90])
+
     @skipif(_no_statsmodels)
     def test_regress_n_boot(self):
 
@@ -776,6 +790,24 @@ class TestDiscretePlots(object):
 
         plt.close("all")
 
+    def test_factorplot_missing(self):
+
+        d = pd.DataFrame(dict(a=["a", "a", "b", "c", "c"],
+                              b=["x", "y", "x", "x", "y"],
+                              c=[1, 2, 3, 4, 5]))
+
+        g = lm.factorplot("a", "c", data=d, col="b", kind="point")
+
+        ax = g.axes[0, 0]
+        x1, y1 = ax.collections[0].get_offsets().T
+        npt.assert_array_equal(x1, [0, 1, 2])
+        npt.assert_array_equal(y1, [1, 3, 4])
+
+        ax = g.axes[0, 1]
+        x1, y1 = ax.collections[0].get_offsets().T
+        npt.assert_array_equal(x1, [0, 2])
+        npt.assert_array_equal(y1, [2, 5])
+
     def test_factorplot_hline(self):
 
         g = lm.factorplot("x", "v", data=self.df, kind="bar", hline=0)
@@ -833,6 +865,30 @@ class TestRegressionPlots(object):
 
         plt.close("all")
 
+    def test_regplot_scatter_kws_alpha(self):
+
+        f, ax = plt.subplots()
+        color = np.array([[0.3, 0.8, 0.5, 0.5]])
+        ax = lm.regplot("x", "y", self.df, scatter_kws={'color': color})
+        nt.assert_is(ax.collections[0]._alpha, None)
+        nt.assert_equal(ax.collections[0]._facecolors[0, 3], 0.5)
+
+        f, ax = plt.subplots()
+        color = np.array([[0.3, 0.8, 0.5]])
+        ax = lm.regplot("x", "y", self.df, scatter_kws={'color': color})
+        nt.assert_equal(ax.collections[0]._alpha, 0.8)
+
+        f, ax = plt.subplots()
+        color = np.array([[0.3, 0.8, 0.5]])
+        ax = lm.regplot("x", "y", self.df, scatter_kws={'color': color,
+                                                        'alpha': 0.4})
+        nt.assert_equal(ax.collections[0]._alpha, 0.4)
+
+        f, ax = plt.subplots()
+        color = 'r'
+        ax = lm.regplot("x", "y", self.df, scatter_kws={'color': color})
+        nt.assert_equal(ax.collections[0]._alpha, 0.8)
+
     def test_regplot_binned(self):
 
         ax = lm.regplot("x", "y", self.df, x_bins=5)
@@ -881,7 +937,7 @@ class TestRegressionPlots(object):
         g = lm.lmplot("x", "y", hue="h", data=self.df, ci=None)
         red_scatter, blue_scatter = g.axes[0, 0].collections
 
-        red, blue = color_palette("husl", 2)
+        red, blue = color_palette(n_colors=2)
         npt.assert_array_equal(red, red_scatter.get_facecolors()[0, :3])
         npt.assert_array_equal(blue, blue_scatter.get_facecolors()[0, :3])
 

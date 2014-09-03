@@ -24,7 +24,7 @@ class TestBoxReshaping(object):
     x = rs.randn(n_total / 3, 3)
     x_df = pd.DataFrame(x, columns=pd.Series(list("XYZ"), name="big"))
     y = pd.Series(rs.randn(n_total), name="y_data")
-    g = pd.Series(rs.choice(list("abc"), n_total), name="small")
+    g = pd.Series(np.repeat(list("abc"), n_total / 3), name="small")
     df = pd.DataFrame(dict(y=y, g=g))
 
     def test_1d_values(self):
@@ -245,6 +245,39 @@ class TestKDE(object):
             dist.kdeplot(self.x, data2=self.y, cumulative=True)
 
 
+class TestViolinPlot(object):
+
+    df = pd.DataFrame(dict(x=np.random.randn(60),
+                           y=list("abcdef") * 10,
+                           z=list("ab") * 29 + ["a", "c"]))
+
+    def test_single_violin(self):
+
+        ax = dist.violinplot(self.df.x)
+        nt.assert_equal(len(ax.collections), 1)
+        nt.assert_equal(len(ax.lines), 5)
+        plt.close("all")
+
+    def test_multi_violins(self):
+
+        ax = dist.violinplot(self.df.x, self.df.y)
+        nt.assert_equal(len(ax.collections), 6)
+        nt.assert_equal(len(ax.lines), 30)
+        plt.close("all")
+
+    def test_multi_violins_single_obs(self):
+
+        ax = dist.violinplot(self.df.x, self.df.z)
+        nt.assert_equal(len(ax.collections), 2)
+        nt.assert_equal(len(ax.lines), 11)
+        plt.close("all")
+
+    @classmethod
+    def teardown_class(cls):
+        """Ensure that all figures are closed on exit."""
+        plt.close("all")
+
+
 class TestJointPlot(object):
 
     rs = np.random.RandomState(sum(map(ord, "jointplot")))
@@ -347,4 +380,25 @@ class TestJointPlot(object):
         g = dist.jointplot("x", "y", self.data, stat_func=None)
         nt.assert_is(g.ax_joint.legend_, None)
 
+        plt.close("all")
+
+    def test_hex_customise(self):
+
+        # test that default gridsize can be overridden
+        g = dist.jointplot("x", "y", self.data, kind="hex",
+                           joint_kws=dict(gridsize=5))
+        nt.assert_equal(len(g.ax_joint.collections), 1)
+        a = g.ax_joint.collections[0].get_array()
+        nt.assert_equal(28, a.shape[0])  # 28 hexagons expected for gridsize 5
+
+        plt.close("all")
+
+    def test_bad_kind(self):
+
+        with nt.assert_raises(ValueError):
+            dist.jointplot("x", "y", self.data, kind="not_a_kind")
+
+    @classmethod
+    def teardown_class(cls):
+        """Ensure that all figures are closed on exit."""
         plt.close("all")

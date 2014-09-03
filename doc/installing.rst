@@ -3,9 +3,8 @@
 Installing and getting started
 ------------------------------
 
-To install the released version of seaborn, you can use ``pip`` or
-``easy_install``, (i.e. ``pip install seaborn``). Alternatively, you can use
-``pip`` to install the development version, with the command ``pip install
+To install the released version of seaborn, you can use ``pip`` (i.e. ``pip install seaborn``). 
+Alternatively, you can use ``pip`` to install the development version, with the command ``pip install
 git+git://github.com/mwaskom/seaborn.git#egg=seaborn``. Another option would be
 to to clone the `github repository <https://github.com/mwaskom/seaborn>`_ and
 install with ``pip install .`` from the source directory. Seaborn itself is pure
@@ -36,6 +35,17 @@ Recommended dependencies
 
 -  `patsy <http://patsy.readthedocs.org/en/latest/>`__
 
+Version-wise, we make an attempt to keep seaborn working on the stable Debian
+channels. There may be cases where some more advanced features only work with
+newer versions of these dependencies, although these should be rare. There are
+also some known bugs on older versions of matplotlib, so you should in general
+try to use a modern version, but for many cases older matplotlibs will work
+fine.  Seaborn is tested on the most recent versions offered through ``conda``.
+
+Import conventions
+~~~~~~~~~~~~~~~~~~
+
+By convention, ``seaborn`` is abbreviated to ``sns`` on imports.
 
 Testing
 ~~~~~~~
@@ -43,9 +53,7 @@ Testing
 To test seaborn, run ``make test`` in the root directory of the source
 distribution. This runs the unit test suite (which can also be exercised
 separately by running ``nosetests``). It also runs the code in the example 
-notebooks, comparing the output to what is stored in the notebook files and
-reporting any discrepancies. Testing requires the Python Image Library, which
-is not a dependency of the main package.
+notebooks to smoke-test a broader and more realistic range of example usage.
 
 Bugs
 ~~~~

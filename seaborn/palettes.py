@@ -10,6 +10,7 @@ from .external.six import string_types
 from .external.six.moves import range
 
 from .utils import desaturate
+from .xkcd_rgb import xkcd_rgb
 
 
 class _ColorPalette(list):
@@ -278,3 +279,109 @@ def blend_palette(colors, n_colors=6, as_cmap=False):
     if not as_cmap:
         pal = pal(np.linspace(0, 1, n_colors))
     return pal
+
+
+def xkcd_palette(colors):
+    """Make a palette with color names from the xkcd color survey.
+
+    This is just a simple wrapper around the seaborn.xkcd_rbg dictionary.
+
+    See xkcd for the full list of colors: http://xkcd.com/color/rgb/
+
+    """
+    palette = [xkcd_rgb[name] for name in colors]
+    return color_palette(palette, len(palette))
+
+
+def cubehelix_palette(n_colors=6, start=0, rot=.4, gamma=1.0, hue=0.8,
+                      light=.85, dark=.15, reverse=False, as_cmap=False):
+    """Make a sequential palette from the cubehelix system.
+
+    This produces a colormap with linearly-decreasing (or increasing)
+    brightness. That means that information will be preserved if printed to
+    black and white or viewed by someone who is colorblind.  "cubehelix" is
+    also availible as a matplotlib-based palette, but this function gives the
+    user more control over the look of the palette and has a different set of
+    defaults.
+
+    Parameters
+    ----------
+    n_colors : int
+        Number of colors in the palette.
+    start : float, 0 <= start <= 3
+        The hue at the start of the helix.
+    rot : float
+        Rotations around the hue wheel over the range of the palette.
+    gamma : float 0 <= gamma
+        Gamma factor to emphasize darker (gamma < 1) or lighter (gamma > 1)
+        colors.
+    hue : float, 0 <= hue <= 1
+        Saturation of the colors.
+    dark : float 0 <= dark <= 1
+        Intensity of the darkest color in the palette.
+    light : float 0 <= light <= 1
+        Intensity of the lightest color in the palette.
+    reverse : bool
+        If True, the palette will go from dark to light.
+    as_cmap : bool
+        If True, return a matplotlib colormap instead of a list of colors.
+
+    Returns
+    -------
+    palette : list or colormap
+
+    See Also
+    --------
+    choose_cubehelix : Launch an interactive widget to select parameters.
+
+    References
+    ----------
+    Green, D. A. (2011). "A colour scheme for the display of astronomical
+    intensity images". Bulletin of the Astromical Society of India, Vol. 39,
+    p. 289-295.
+
+    """
+    cdict = mpl._cm.cubehelix(gamma, start, rot, hue)
+    cmap = mpl.colors.LinearSegmentedColormap("cubehelix", cdict)
+
+    x = np.linspace(light, dark, n_colors)
+    pal = cmap(x)[:, :3].tolist()
+    if reverse:
+        pal = pal[::-1]
+
+    if as_cmap:
+        x_256 = np.linspace(light, dark, 256)
+        if reverse:
+            x_256 = x_256[::-1]
+        pal_256 = cmap(x_256)
+        cmap = mpl.colors.ListedColormap(pal_256)
+        return cmap
+    else:
+        return pal
+
+
+def choose_cubehelix():
+    """Launch an interactive widget to select cubehelix parameters.
+
+    Requires IPython 2 and must be used in a notebook.
+
+    See Also
+    --------
+    cubehelix_palette: Make a sequential palette from the cubehelix system.
+
+    """
+    from .miscplot import palplot
+    from IPython.html.widgets import (interact,
+                                      FloatSliderWidget, IntSliderWidget)
+
+    @interact
+    def choose_cubehelix(n_colors=IntSliderWidget(min=1, max=15, value=6),
+                         start=FloatSliderWidget(min=0, max=3, value=0),
+                         rot=FloatSliderWidget(min=-1, max=1, value=.4),
+                         gamma=FloatSliderWidget(min=0, max=5, value=1),
+                         hue=FloatSliderWidget(min=0, max=1, value=.8),
+                         dark=FloatSliderWidget(min=0, max=1, value=.15),
+                         light=FloatSliderWidget(min=0, max=1, value=.85),
+                         reverse=False):
+        palplot(cubehelix_palette(n_colors, start, rot, gamma,
+                                  hue, dark, light, reverse))

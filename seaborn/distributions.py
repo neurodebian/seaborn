@@ -101,10 +101,15 @@ def _box_reshape(vals, groupby, names, order):
     return vals, xlabel, ylabel, names
 
 
-def _box_colors(vals, color):
+def _box_colors(vals, color, sat):
     """Find colors to use for boxplots or violinplots."""
     if color is None:
-        colors = husl_palette(len(vals), l=.7)
+        # Default uses either the current palette or husl
+        current_palette = mpl.rcParams["axes.color_cycle"]
+        if len(vals) <= len(current_palette):
+            colors = color_palette(n_colors=len(vals))
+        else:
+            colors = husl_palette(len(vals), l=.7)
     else:
         try:
             color = mpl.colors.colorConverter.to_rgb(color)
@@ -114,7 +119,7 @@ def _box_colors(vals, color):
 
     # Desaturate a bit because these are patches
     colors = [mpl.colors.colorConverter.to_rgb(c) for c in colors]
-    colors = [desaturate(c, .7) for c in colors]
+    colors = [desaturate(c, sat) for c in colors]
 
     # Determine the gray color for the lines
     light_vals = [colorsys.rgb_to_hls(*c)[1] for c in colors]
@@ -126,13 +131,13 @@ def _box_colors(vals, color):
 
 def boxplot(vals, groupby=None, names=None, join_rm=False, order=None,
             color=None, alpha=None, fliersize=3, linewidth=1.5, widths=.8,
-            label=None, ax=None, **kwargs):
+            saturation=.7, label=None, ax=None, **kwargs):
     """Wrapper for matplotlib boxplot with better aesthetics and functionality.
 
     Parameters
     ----------
     vals : DataFrame, Series, 2D array, list of vectors, or vector.
-        Data for plot. DataFrames and 2D arrays are assuemd to be "wide" with
+        Data for plot. DataFrames and 2D arrays are assumed to be "wide" with
         each column mapping to a box. Lists of data are assumed to have one
         element per box.  Can also provide one long Series in conjunction with
         a grouping element as the `groupy` parameter to reshape the data into
@@ -157,6 +162,10 @@ def boxplot(vals, groupby=None, names=None, join_rm=False, order=None,
         Markersize for the fliers.
     linewidth : float, optional
         Width for the box outlines and whiskers.
+    saturation : float, 0-1
+        Saturation relative to the fully-saturated color. Large patches tend
+        to look better at lower saturations, so this dims the palette colors
+        a bit by default.
     ax : matplotlib axis, optional
         Existing axis to plot into, otherwise grab current axis.
     kwargs : additional keyword arguments to boxplot
@@ -177,7 +186,7 @@ def boxplot(vals, groupby=None, names=None, join_rm=False, order=None,
     boxes = ax.boxplot(vals, patch_artist=True, widths=widths, **kwargs)
 
     # Find plot colors
-    colors, gray = _box_colors(vals, color)
+    colors, gray = _box_colors(vals, color, saturation)
 
     # Set the new aesthetics
     for i, box in enumerate(boxes["boxes"]):
@@ -243,15 +252,15 @@ def boxplot(vals, groupby=None, names=None, join_rm=False, order=None,
 
 def violinplot(vals, groupby=None, inner="box", color=None, positions=None,
                names=None, order=None, bw="scott", widths=.8, alpha=None,
-               join_rm=False, gridsize=100, cut=3, inner_kws=None,
-               ax=None, **kwargs):
+               saturation=.7, join_rm=False, gridsize=100, cut=3,
+               inner_kws=None, ax=None, vert=True, **kwargs):
 
     """Create a violin plot (a combination of boxplot and kernel density plot).
 
     Parameters
     ----------
     vals : DataFrame, Series, 2D array, or list of vectors.
-        Data for plot. DataFrames and 2D arrays are assuemd to be "wide" with
+        Data for plot. DataFrames and 2D arrays are assumed to be "wide" with
         each column mapping to a box. Lists of data are assumed to have one
         element per box.  Can also provide one long Series in conjunction with
         a grouping element as the `groupy` parameter to reshape the data into
@@ -259,7 +268,7 @@ def violinplot(vals, groupby=None, inner="box", color=None, positions=None,
     groupby : grouping object
         If `vals` is a Series, this is used to group into boxes by calling
         pd.groupby(vals, groupby).
-    inner : box | sticks | points
+    inner : {'box' | 'stick' | 'points'}
         Plot quartiles or individual sample values inside violin.
     color : mpl color, sequence of colors, or seaborn palette name
         Inner violin colors
@@ -279,6 +288,10 @@ def violinplot(vals, groupby=None, inner="box", color=None, positions=None,
         Width of each violin at maximum density.
     alpha : float, optional
         Transparancy of violin fill.
+    saturation : float, 0-1
+        Saturation relative to the fully-saturated color. Large patches tend
+        to look better at lower saturations, so this dims the palette colors
+        a bit by default.
     join_rm : boolean, optional
         If True, positions in the input arrays are treated as repeated
         measures and are joined with a line plot.
@@ -290,6 +303,9 @@ def violinplot(vals, groupby=None, inner="box", color=None, positions=None,
         Keyword arugments for inner plot.
     ax : matplotlib axis, optional
         Axis to plot on, otherwise grab current axis.
+    vert : boolean, optional
+        If true (default), draw vertical plots; otherwise, draw horizontal
+        ones.
     kwargs : additional parameters to fill_betweenx
 
     Returns
@@ -298,6 +314,7 @@ def violinplot(vals, groupby=None, inner="box", color=None, positions=None,
         Axis with violin plot.
 
     """
+
     if ax is None:
         ax = plt.gca()
 
@@ -305,7 +322,7 @@ def violinplot(vals, groupby=None, inner="box", color=None, positions=None,
     vals, xlabel, ylabel, names = _box_reshape(vals, groupby, names, order)
 
     # Sort out the plot colors
-    colors, gray = _box_colors(vals, color)
+    colors, gray = _box_colors(vals, color, saturation)
 
     # Initialize the kwarg dict for the inner plot
     if inner_kws is None:
@@ -332,9 +349,28 @@ def violinplot(vals, groupby=None, inner="box", color=None, positions=None,
     # Iterate over the variables
     for i, a in enumerate(vals):
 
-        # Fit the KDE
         x = positions[i]
-        kde = stats.gaussian_kde(a, bw)
+
+        # If we only have a single value, plot a horizontal line
+        if len(a) == 1:
+            y = a[0]
+            if vert:
+                ax.plot([x - widths / 2, x + widths / 2], [y, y], **inner_kws)
+            else:
+                ax.plot([y, y], [x - widths / 2, x + widths / 2], **inner_kws)
+            continue
+
+        # Fit the KDE
+        try:
+            kde = stats.gaussian_kde(a, bw)
+        except TypeError:
+            kde = stats.gaussian_kde(a)
+            if bw != "scott":  # scipy default
+                msg = ("Ignoring bandwidth choice, "
+                       "please upgrade scipy to use a different bandwidth.")
+                warnings.warn(msg, UserWarning)
+
+        # Determine the support region
         if isinstance(bw, str):
             bw_name = "scotts" if bw == "scott" else bw
             _bw = getattr(kde, "%s_factor" % bw_name)() * a.std(ddof=1)
@@ -345,26 +381,40 @@ def violinplot(vals, groupby=None, inner="box", color=None, positions=None,
         scl = 1 / (dens.max() / (widths / 2))
         dens *= scl
 
-        # Draw the violin
-        ax.fill_betweenx(y, x - dens, x + dens, alpha=alpha, color=colors[i])
+        # Draw the violin. If vert (default), we will use ``ax.plot`` in the
+        # standard way; otherwise, we invert x,y.
+        # For this, define a simple wrapper ``ax_plot``
+        color = colors[i]
+        if vert:
+            ax.fill_betweenx(y, x - dens, x + dens, alpha=alpha, color=color)
+
+            def ax_plot(x, y, *args, **kwargs):
+                ax.plot(x, y, *args, **kwargs)
+
+        else:
+            ax.fill_between(y, x - dens, x + dens, alpha=alpha, color=color)
+
+            def ax_plot(x, y, *args, **kwargs):
+                ax.plot(y, x, *args, **kwargs)
+
         if inner == "box":
             for quant in percentiles(a, [25, 75]):
                 q_x = kde.evaluate(quant) * scl
                 q_x = [x - q_x, x + q_x]
-                ax.plot(q_x, [quant, quant], linestyle=":",  **inner_kws)
+                ax_plot(q_x, [quant, quant], linestyle=":",  **inner_kws)
             med = np.median(a)
             m_x = kde.evaluate(med) * scl
             m_x = [x - m_x, x + m_x]
-            ax.plot(m_x, [med, med], linestyle="--", **inner_kws)
+            ax_plot(m_x, [med, med], linestyle="--", **inner_kws)
         elif inner == "stick":
             x_vals = kde.evaluate(a) * scl
             x_vals = [x - x_vals, x + x_vals]
-            ax.plot(x_vals, [a, a], linestyle="-", **inner_kws)
+            ax_plot(x_vals, [a, a], linestyle="-", **inner_kws)
         elif inner == "points":
             x_vals = [x for _ in a]
-            ax.plot(x_vals, a, mew=0, linestyle="", **inner_kws)
+            ax_plot(x_vals, a, mew=0, linestyle="", **inner_kws)
         for side in [-1, 1]:
-            ax.plot((side * dens) + x, y, c=gray, lw=lw)
+            ax_plot((side * dens) + x, y, c=gray, lw=lw)
 
     # Draw the repeated measure bridges
     if join_rm:
@@ -372,17 +422,31 @@ def violinplot(vals, groupby=None, inner="box", color=None, positions=None,
                 color=inner_kws["color"], alpha=2. / 3)
 
     # Add in semantic labels
-    ax.set_xticks(positions)
     if names is not None:
         if len(vals) != len(names):
             raise ValueError("Length of names list must match nuber of bins")
-        ax.set_xticklabels(list(names))
-    ax.set_xlim(positions[0] - .5, positions[-1] + .5)
+        names = list(names)
 
-    if xlabel is not None:
-        ax.set_xlabel(xlabel)
-    if ylabel is not None:
-        ax.set_ylabel(ylabel)
+    if vert:
+        # Add in semantic labels
+        ax.set_xticks(positions)
+        ax.set_xlim(positions[0] - .5, positions[-1] + .5)
+        ax.set_xticklabels(names)
+
+        if xlabel is not None:
+            ax.set_xlabel(xlabel)
+        if ylabel is not None:
+            ax.set_ylabel(ylabel)
+    else:
+        # Add in semantic labels
+        ax.set_yticks(positions)
+        ax.set_yticklabels(names)
+        ax.set_ylim(positions[0] - .5, positions[-1] + .5)
+
+        if ylabel is not None:
+            ax.set_ylabel(xlabel)
+        if xlabel is not None:
+            ax.set_xlabel(ylabel)
 
     ax.xaxis.grid(False)
     return ax
@@ -398,7 +462,8 @@ def _freedman_diaconis_bins(a):
 
 def distplot(a, bins=None, hist=True, kde=True, rug=False, fit=None,
              hist_kws=None, kde_kws=None, rug_kws=None, fit_kws=None,
-             color=None, vertical=False, axlabel=None, label=None, ax=None):
+             color=None, vertical=False, norm_hist=False, axlabel=None,
+             label=None, ax=None):
     """Flexibly plot a distribution of observations.
 
     Parameters
@@ -424,6 +489,9 @@ def distplot(a, bins=None, hist=True, kde=True, rug=False, fit=None,
         Color to plot everything but the fitted curve in.
     vertical : bool, optional
         If True, oberved values are on y-axis.
+    norm_hist : bool, otional
+        If True, the histogram height shows a density rather than a count.
+        This is implied if a KDE or fitted density is plotted.
     axlabel : string, False, or None, optional
         Name for the support axis label. If None, will try to get it
         from a.namel if False, do not set a label.
@@ -449,6 +517,9 @@ def distplot(a, bins=None, hist=True, kde=True, rug=False, fit=None,
 
     # Make a a 1-d array
     a = np.asarray(a).squeeze()
+
+    # Decide if the hist is normed
+    norm_hist = norm_hist or kde or (fit is not None)
 
     # Handle dictionary defaults
     if hist_kws is None:
@@ -484,9 +555,10 @@ def distplot(a, bins=None, hist=True, kde=True, rug=False, fit=None,
         if bins is None:
             bins = _freedman_diaconis_bins(a)
         hist_kws.setdefault("alpha", 0.4)
+        hist_kws.setdefault("normed", norm_hist)
         orientation = "horizontal" if vertical else "vertical"
         hist_color = hist_kws.pop("color", color)
-        ax.hist(a, bins, normed=True, orientation=orientation,
+        ax.hist(a, bins, orientation=orientation,
                 color=hist_color, **hist_kws)
         if hist_color != color:
             hist_kws["color"] = hist_color
@@ -610,7 +682,14 @@ def _statsmodels_univariate_kde(data, kernel, bw, gridsize, cut, clip,
 
 def _scipy_univariate_kde(data, bw, gridsize, cut, clip):
     """Compute a univariate kernel density estimate using scipy."""
-    kde = stats.gaussian_kde(data, bw_method=bw)
+    try:
+        kde = stats.gaussian_kde(data, bw_method=bw)
+    except TypeError:
+        kde = stats.gaussian_kde(data)
+        if bw != "scott":  # scipy default
+            msg = ("Ignoring bandwidth choice, "
+                   "please upgrade scipy to use a different bandwidth.")
+            warnings.warn(msg, UserWarning)
     if isinstance(bw, str):
         bw = "scotts" if bw == "scott" else bw
         bw = getattr(kde, "%s_factor" % bw)()
@@ -738,9 +817,9 @@ def kdeplot(data, data2=None, shade=False, vertical=False, kernel="gau",
     if ax is None:
         ax = plt.gca()
 
-    data = data.astype(np.float64, copy=False)
+    data = data.astype(np.float64)
     if data2 is not None:
-        data2 = data2.astype(np.float64, copy=False)
+        data2 = data2.astype(np.float64)
 
     bivariate = False
     if isinstance(data, np.ndarray) and np.ndim(data) > 1:
@@ -876,8 +955,12 @@ def jointplot(x, y, data=None, kind="scatter", stat_func=stats.pearsonr,
     # Plot the data using the grid
     if kind == "scatter":
 
-        grid.plot_joint(plt.scatter, color=color, **joint_kws)
-        grid.plot_marginals(distplot, kde=False, color=color, **marginal_kws)
+        joint_kws.setdefault("color", color)
+        grid.plot_joint(plt.scatter, **joint_kws)
+
+        marginal_kws.setdefault("kde", False)
+        marginal_kws.setdefault("color", color)
+        grid.plot_marginals(distplot, **marginal_kws)
 
     elif kind.startswith("hex"):
 
@@ -885,29 +968,51 @@ def jointplot(x, y, data=None, kind="scatter", stat_func=stats.pearsonr,
         y_bins = _freedman_diaconis_bins(grid.y)
         gridsize = int(np.mean([x_bins, y_bins]))
 
-        grid.plot_joint(plt.hexbin, gridsize=gridsize, cmap=cmap, **joint_kws)
-        grid.plot_marginals(distplot, kde=False, color=color, **marginal_kws)
+        joint_kws.setdefault("gridsize", gridsize)
+        joint_kws.setdefault("cmap", cmap)
+        grid.plot_joint(plt.hexbin, **joint_kws)
+
+        marginal_kws.setdefault("kde", False)
+        marginal_kws.setdefault("color", color)
+        grid.plot_marginals(distplot, **marginal_kws)
 
     elif kind.startswith("kde"):
 
-        grid.plot_joint(kdeplot, shade=True, cmap=cmap, **joint_kws)
-        grid.plot_marginals(kdeplot, shade=True, color=color, **marginal_kws)
+        joint_kws.setdefault("shade", True)
+        joint_kws.setdefault("cmap", cmap)
+        grid.plot_joint(kdeplot, **joint_kws)
+
+        marginal_kws.setdefault("shade", True)
+        marginal_kws.setdefault("color", color)
+        grid.plot_marginals(kdeplot, **marginal_kws)
 
     elif kind.startswith("reg"):
 
         from .linearmodels import regplot
-        grid.plot_marginals(distplot, color=color, **marginal_kws)
-        grid.plot_joint(regplot, color=color, **joint_kws)
+
+        marginal_kws.setdefault("color", color)
+        grid.plot_marginals(distplot, **marginal_kws)
+
+        joint_kws.setdefault("color", color)
+        grid.plot_joint(regplot, **joint_kws)
 
     elif kind.startswith("resid"):
 
         from .linearmodels import residplot
-        grid.plot_joint(residplot, color=color, **joint_kws)
+
+        joint_kws.setdefault("color", color)
+        grid.plot_joint(residplot, **joint_kws)
+
         x, y = grid.ax_joint.collections[0].get_offsets().T
-        distplot(x, color=color, kde=False, ax=grid.ax_marg_x)
-        distplot(y, color=color, kde=False, vertical=True,
-                 fit=stats.norm, ax=grid.ax_marg_y)
+        marginal_kws.setdefault("color", color)
+        marginal_kws.setdefault("kde", False)
+        distplot(x, ax=grid.ax_marg_x, **marginal_kws)
+        distplot(y, vertical=True, fit=stats.norm, ax=grid.ax_marg_y,
+                 **marginal_kws)
         stat_func = None
+    else:
+        msg = "kind must be either 'scatter', 'reg', 'resid', 'kde', or 'hex'"
+        raise ValueError(msg)
 
     if stat_func is not None:
         grid.annotate(stat_func, **annot_kws)
