@@ -21,7 +21,7 @@ Standards-Version: 3.9.5
 Homepage: https://github.com/mwaskom/seaborn
 Vcs-Browser: http://github.com/neurodebian/seaborn
 Vcs-Git: git://github.com/neurodebian/seaborn.git -b debian
-X-Python-Version: >= 2.6
+X-Python-Version: >= 2.7
 X-Python3-Version: >= 3.2
 
 Package: python-seaborn
