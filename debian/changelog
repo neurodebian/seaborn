@@ -1,3 +1,13 @@
+seaborn (0.4.0+git15-g1d69cbd-1) unstable; urgency=medium
+
+  * New upstream snapshot from v0.4.0-15-g1d69cbd with various fixes toward
+    new pythons (3.4) and numpy 1.9
+  * debian/control
+    - swap order of bdepends for matplotlib to make buildds happy again
+      (Closes: #765147)
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Mon, 13 Oct 2014 14:26:54 -0400
+
 seaborn (0.4.0-1) unstable; urgency=medium
 
   * Fresh upstream release
