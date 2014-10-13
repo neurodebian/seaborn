@@ -42,7 +42,7 @@ class TestColorPalettes(object):
         pals = "deep", "muted", "pastel", "bright", "dark", "colorblind"
         for name in pals:
             pal_out = palettes.color_palette(name)
-            nt.assert_equal(len(np.unique(pal_out)), 6)
+            nt.assert_equal(len(pal_out), 6)
 
     def test_hls_palette(self):
 
@@ -205,7 +205,7 @@ class TestColorPalettes(object):
 
     def test_xkcd_palette(self):
 
-        names = xkcd_rgb.keys()[10:15]
+        names = list(xkcd_rgb.keys())[10:15]
         colors = palettes.xkcd_palette(names)
         for name, color in zip(names, colors):
             as_hex = mpl.colors.rgb2hex(color)
