@@ -3,8 +3,12 @@ seaborn (0.4.0-2) unstable; urgency=medium
   * debian/control
     - swap order of bdepends for matplotlib to make buildds happy again
       (Closes: #765147)
+  * debian/patches
+    - up_3d9f355d8a424a984dd6f2de9719658cb1e9f715
+      picked up from upstream to resolve failed unittest while verifying
+      rc options
 
- -- Yaroslav Halchenko <debian@onerussian.com>  Sun, 09 Nov 2014 17:08:50 -0500
+ -- Yaroslav Halchenko <debian@onerussian.com>  Sun, 09 Nov 2014 20:46:25 -0500
 
 seaborn (0.4.0-1) unstable; urgency=medium
 

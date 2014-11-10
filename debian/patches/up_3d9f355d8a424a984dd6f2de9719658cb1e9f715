@@ -1,0 +1,13 @@
+diff --git a/seaborn/rcmod.py b/seaborn/rcmod.py
+index 11a898e..a232d4d 100644
+--- a/seaborn/rcmod.py
++++ b/seaborn/rcmod.py
+@@ -197,7 +197,7 @@ def axes_style(style=None, rc=None):
+             "ytick.color": dark_gray,
+             "axes.axisbelow": True,
+             "image.cmap": "Greys",
+-            "font.family": "sans-serif",
++            "font.family": ["sans-serif"],
+             "font.sans-serif": ["Arial", "Liberation Sans",
+                                 "Bitstream Vera Sans", "sans-serif"],
+             "grid.linestyle": "-",
