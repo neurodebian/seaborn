@@ -1,3 +1,9 @@
+seaborn (0.5.1-1) experimental; urgency=medium
+
+  * New upstream release (Closes: #774809)
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Mon, 26 Jan 2015 11:37:46 -0500
+
 seaborn (0.4.0-2) unstable; urgency=medium
 
   * debian/control
