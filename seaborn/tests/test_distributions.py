@@ -244,6 +244,18 @@ class TestKDE(object):
         with npt.assert_raises(TypeError):
             dist.kdeplot(self.x, data2=self.y, cumulative=True)
 
+    def test_bivariate_kde_series(self):
+        df = pd.DataFrame({'x': self.x, 'y': self.y})
+
+        ax_series = dist.kdeplot(df.x, df.y)
+        ax_values = dist.kdeplot(df.x.values, df.y.values)
+
+        nt.assert_equal(len(ax_series.collections),
+                        len(ax_values.collections))
+        nt.assert_equal(ax_series.collections[0].get_paths(),
+                        ax_values.collections[0].get_paths())
+        plt.close("all")
+
 
 class TestViolinPlot(object):
 
@@ -270,6 +282,12 @@ class TestViolinPlot(object):
         ax = dist.violinplot(self.df.x, self.df.z)
         nt.assert_equal(len(ax.collections), 2)
         nt.assert_equal(len(ax.lines), 11)
+        plt.close("all")
+
+        data = [np.random.randn(30), [0, 0, 0]]
+        ax = dist.violinplot(data)
+        nt.assert_equal(len(ax.collections), 1)
+        nt.assert_equal(len(ax.lines), 6)
         plt.close("all")
 
     @classmethod

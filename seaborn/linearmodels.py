@@ -622,10 +622,10 @@ class _RegressionPlotter(_LinearPlotter):
     def plot(self, ax, scatter_kws, line_kws):
         """Draw the full plot."""
         # Insert the plot label into the correct set of keyword arguments
-        if self.fit_reg:
-            line_kws["label"] = self.label
-        else:
+        if self.scatter:
             scatter_kws["label"] = self.label
+        else:
+            line_kws["label"] = self.label
 
         # Use the current color cycle state as a default
         if self.color is None:
@@ -653,9 +653,22 @@ class _RegressionPlotter(_LinearPlotter):
 
     def scatterplot(self, ax, kws):
         """Draw the data."""
+        # Treat the line-based markers specially, explicitly setting larger
+        # linewidth than is provided by the seaborn style defaults.
+        # This would ideally be handled better in matplotlib (i.e., distinguish
+        # between edgewidth for solid glyphs and linewidth for line glyphs
+        # but this should do for now.
+        line_markers = ["1", "2", "3", "4", "+", "x", "|", "_"]
         if self.x_estimator is None:
+            if "marker" in kws and kws["marker"] in line_markers:
+                lw = mpl.rcParams["lines.linewidth"]
+            else:
+                lw = mpl.rcParams["lines.markeredgewidth"]
+            kws.setdefault("linewidths", lw)
+
             if not hasattr(kws['color'], 'shape') or kws['color'].shape[1] < 4:
                 kws.setdefault("alpha", .8)
+
             x, y = self.scatter_data
             ax.scatter(x, y, **kws)
         else:
@@ -690,10 +703,10 @@ class _RegressionPlotter(_LinearPlotter):
 
 
 def lmplot(x, y, data, hue=None, col=None, row=None, palette=None,
-           col_wrap=None, size=5, aspect=1, sharex=True, sharey=True,
-           hue_order=None, col_order=None, row_order=None, dropna=True,
-           legend=True, legend_out=True, **kwargs):
-    """Plot a linear regression model and data onto a FacetGrid.
+           col_wrap=None, size=5, aspect=1, markers="o", sharex=True,
+           sharey=True, hue_order=None, col_order=None, row_order=None,
+           dropna=True, legend=True, legend_out=True, **kwargs):
+    """Plot a data and a regression model fit onto a FacetGrid.
 
     Parameters
     ----------
@@ -715,10 +728,15 @@ def lmplot(x, y, data, hue=None, col=None, row=None, palette=None,
         Height (in inches) of each facet.
     aspect : scalar, optional
         Aspect * size gives the width (in inches) of each facet.
+    markers : single matplotlib marker code or list, optional
+        Either the marker to use for all datapoints or a list of markers with
+        a length the same as the number of levels in the hue variable so that
+        differently colored points will also have different scatterplot
+        markers.
     share{x, y}: booleans, optional
         Lock the limits of the vertical and horizontal axes across the
         facets.
-    {hue, col, row}_order: sequence of strings
+    {hue, col, row}_order: sequence of strings, optional
         Order to plot the values in the faceting variables in, otherwise
         sorts the unique values.
     dropna : boolean, optional
@@ -756,8 +774,20 @@ def lmplot(x, y, data, hue=None, col=None, row=None, palette=None,
                        row_order=row_order, col_order=col_order,
                        hue_order=hue_order, dropna=dropna,
                        size=size, aspect=aspect, col_wrap=col_wrap,
-                       sharex=sharex, sharey=sharey,
-                       legend=legend, legend_out=legend_out)
+                       sharex=sharex, sharey=sharey, legend_out=legend_out)
+
+    # Add the markers here as FacetGrid has figured out how many levels of the
+    # hue variable are needed and we don't want to duplicate that process
+    if facets.hue_names is None:
+        n_markers = 1
+    else:
+        n_markers = len(facets.hue_names)
+    if not isinstance(markers, list):
+        markers = [markers] * n_markers
+    if len(markers) != n_markers:
+        raise ValueError(("markers must be a singeton or a list of markers "
+                          "for each level of the hue variable"))
+    facets.hue_kws = {"marker": markers}
 
     # Hack to set the x limits properly, which needs to happen here
     # because the extent of the regression estimate is determined
@@ -771,7 +801,7 @@ def lmplot(x, y, data, hue=None, col=None, row=None, palette=None,
     facets.map_dataframe(regplot, x, y, **kwargs)
 
     # Add a legend
-    if hue is not None and legend:
+    if legend and (hue is not None) and (hue not in [col, row]):
         facets.add_legend()
     return facets
 
@@ -788,23 +818,23 @@ def factorplot(x, y=None, hue=None, data=None, row=None, col=None,
     Parameters
     ----------
     x : string
-        Variable name in `data` for splitting the plot on the x axis.
+        Variable name in ``data`` for splitting the plot on the x axis.
     y : string, optional
-        Variable name in `data` for the dependent variable. If omitted, the
+        Variable name in ``data`` for the dependent variable. If omitted, the
         counts within each bin are plotted (without confidence intervals).
+    hue : string, optional
+        Variable name in ``data`` for splitting the plot by color. In the case
+        of ``kind="bar`"`, this also influences the placement on the x axis.
     data : DataFrame
         Long-form (tidy) dataframe with variables in columns and observations
         in rows.
-    hue : string, optional
-        Variable name in `data` for splitting the plot by color. In the case
-        of `kind="bar"`, this also influences the placement on the x axis.
     row, col : strings, optional
-        Variable name(s) in `data` for splitting the plot into a facet grid
+        Variable name(s) in ``data`` for splitting the plot into a facet grid
         along row and columns.
     col_wrap : int or None, optional
-        Wrap the column variable at this width (incompatible with `row`).
+        Wrap the column variable at this width (incompatible with ``row``).
     estimator : vector -> scalar function, optional
-        Function to aggregate `y` values at each level of the factors.
+        Function to aggregate ``y`` values at each level of the factors.
     ci : int in {0, 100}, optional
         Size of confidene interval to draw around the aggregated value.
     n_boot : int, optional
@@ -812,30 +842,33 @@ def factorplot(x, y=None, hue=None, data=None, row=None, col=None,
     units : vector, optional
         Vector with ids for sampling units; bootstrap will be performed over
         these units and then within them.
-    kind : {"auto", "point", "bar"}, optional
+    {x, hue, col, row}_order : list-like, optional
+        Order of levels plotted on various dimensions of the figure. Default
+        is to use sorted level values.
+    kind : {"auto", "point", "bar", "box"}, optional
         Visual representation of the plot. "auto" uses a few heuristics to
         guess whether "bar" or "point" is more appropriate.
     markers : list of strings, optional
-        Marker codes to map the `hue` variable with. Only relevant when kind
+        Marker codes to map the ``hue`` variable with. Only relevant when kind
         is "point".
     linestyles : list of strings, optional
-        Linestyle codes to map the `hue` variable with. Only relevant when
+        Linestyle codes to map the ``hue`` variable with. Only relevant when
         kind is "point".
     dodge : positive scalar, optional
-        Horizontal offset applies to different `hue` levels. Only relevant
+        Horizontal offset applies to different ``hue`` levels. Only relevant
         when kind is "point".
     join : boolean, optional
-        Whether points from the same level of `hue` should be joined. Only
+        Whether points from the same level of ``hue`` should be joined. Only
         relevant when kind is "point".
     size : positive scalar, optional
         Height (in inches) of each facet.
     aspect : positive scalar, optional
         Ratio of facet width to facet height.
     palette : seaborn color palette, optional
-        Palette to map `hue` variable with (or `x` variable when `hue` is
-        None).
+        Palette to map ``hue`` variable with (or ``x`` variable when ``hue``
+        is None).
     legend : boolean, optional
-        Draw a legend, only if `hue` is used and does not overlap with other
+        Draw a legend, only if ``hue`` is used and does not overlap with other
         variables.
     legend_out : boolean, optional
         Draw the legend outside the grid; otherwise it is placed within the
@@ -847,7 +880,7 @@ def factorplot(x, y=None, hue=None, data=None, row=None, col=None,
         Lock the limits of the vertical and/or horizontal axes across the
         facets.
     margin_titles : bool, optional
-        If True and there is a `row` variable, draw the titles on the right
+        If True and there is a ``row`` variable, draw the titles on the right
         margin of the grid (experimental).
 
     Returns
@@ -875,8 +908,7 @@ def factorplot(x, y=None, hue=None, data=None, row=None, col=None,
     facets = FacetGrid(data, row, col, facet_hue, palette=facet_palette,
                        row_order=row_order, col_order=col_order, dropna=dropna,
                        size=size, aspect=aspect, col_wrap=col_wrap,
-                       legend=legend, legend_out=legend_out,
-                       sharex=sharex, sharey=sharey,
+                       legend_out=legend_out, sharex=sharex, sharey=sharey,
                        margin_titles=margin_titles)
 
     if kind == "auto":
@@ -1053,7 +1085,7 @@ def regplot(x, y, data=None, x_estimator=None, x_bins=None, x_ci=95,
             logx=False, x_partial=None, y_partial=None,
             truncate=False, dropna=True, x_jitter=None, y_jitter=None,
             xlabel=None, ylabel=None, label=None,
-            color=None, scatter_kws=None, line_kws=None,
+            color=None, marker="o", scatter_kws=None, line_kws=None,
             ax=None):
     """Draw a scatter plot between x and y with a regression line.
 
@@ -1126,6 +1158,8 @@ def regplot(x, y, data=None, x_estimator=None, x_bins=None, x_ci=95,
         Color to use for all elements of the plot. Can set the scatter and
         regression colors separately using the `kws` dictionaries. If not
         provided, the current color in the axis cycle is used.
+    marker : matplotlib marker code, optional
+        Marker to use for the scatterplot points.
     {scatter, line}_kws : dictionaries, optional
         Additional keyword arguments passed to scatter() and plot() for drawing
         the components of the plot.
@@ -1156,6 +1190,7 @@ def regplot(x, y, data=None, x_estimator=None, x_bins=None, x_ci=95,
         ax = plt.gca()
 
     scatter_kws = {} if scatter_kws is None else copy.copy(scatter_kws)
+    scatter_kws["marker"] = marker
     line_kws = {} if line_kws is None else copy.copy(line_kws)
     plotter.plot(ax, scatter_kws, line_kws)
     return ax
@@ -1476,8 +1511,10 @@ def corrplot(data, names=None, annot=True, sig_stars=True, sig_tail="both",
         full range (-1, 1), or specify (min, max) values for the colormap.
     cbar : bool
         If true, plot the colorbar legend.
-    method: pearson | kendall | spearman
-        Correlation method to compute pairwise correlations.
+    method: None (pearson) | kendall | spearman
+        Correlation method to compute pairwise correlations. Methods other
+        than the default pearson correlation will not have a significance
+        computed.
     ax : matplotlib axis
         Axis to draw plot in.
     kwargs : other keyword arguments
@@ -1505,7 +1542,7 @@ def corrplot(data, names=None, annot=True, sig_stars=True, sig_tail="both",
     data = data[names]
 
     # Get p values with a permutation test
-    if annot and sig_stars:
+    if annot and sig_stars and method is None:
         p_mat = algo.randomize_corrmat(data.values.T, sig_tail, sig_corr)
     else:
         p_mat = None
@@ -1616,7 +1653,7 @@ def symmatplot(mat, p_mat=None, names=None, cmap="Greys", cmap_range=None,
 
 def pairplot(data, hue=None, hue_order=None, palette=None,
              vars=None, x_vars=None, y_vars=None,
-             kind="scatter", diag_kind="hist",
+             kind="scatter", diag_kind="hist", markers=None,
              size=3, aspect=1, dropna=True,
              plot_kws=None, diag_kws=None, grid_kws=None):
     """Plot pairwise relationships in a dataset.
@@ -1643,6 +1680,11 @@ def pairplot(data, hue=None, hue_order=None, palette=None,
         Kind of plot for the non-identity relationships.
     diag_kind : {'hist', 'kde'}, optional
         Kind of plot for the diagonal subplots.
+    markers : single matplotlib marker code or list, optional
+        Either the marker to use for all datapoints or a list of markers with
+        a length the same as the number of levels in the hue variable so that
+        differently colored points will also have different scatterplot
+        markers.
     size : scalar, optional
         Height (in inches) of each facet.
     aspect : scalar, optional
@@ -1676,6 +1718,20 @@ def pairplot(data, hue=None, hue_order=None, palette=None,
                     hue_order=hue_order, palette=palette,
                     diag_sharey=diag_sharey,
                     size=size, aspect=aspect, dropna=dropna, **grid_kws)
+
+    # Add the markers here as PairGrid has figured out how many levels of the
+    # hue variable are needed and we don't want to duplicate that process
+    if markers is not None:
+        if grid.hue_names is None:
+            n_markers = 1
+        else:
+            n_markers = len(grid.hue_names)
+        if not isinstance(markers, list):
+            markers = [markers] * n_markers
+        if len(markers) != n_markers:
+            raise ValueError(("markers must be a singeton or a list of markers"
+                              " for each level of the hue variable"))
+        grid.hue_kws = {"marker": markers}
 
     # Maybe plot on the diagonal
     if grid.square_grid:

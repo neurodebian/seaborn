@@ -8,6 +8,7 @@ from distutils.version import LooseVersion
 import nose.tools as nt
 import numpy.testing as npt
 from numpy.testing.decorators import skipif
+import pandas.util.testing as tm
 
 from .. import axisgrid as ag
 from .. import rcmod
@@ -224,6 +225,12 @@ class TestFacetGrid(object):
                          col_wrap=4, legend_out=False)
         g.map(plt.plot, "x", "y", linewidth=3)
         g.add_legend()
+
+    def test_subplot_kws(self):
+
+        g = ag.FacetGrid(self.df, subplot_kws=dict(axisbg="blue"))
+        for ax in g.axes.flat:
+            nt.assert_equal(ax.get_axis_bgcolor(), "blue")
 
     def test_data_generator(self):
 
@@ -448,6 +455,15 @@ class TestFacetGrid(object):
 
         plt.close("all")
 
+    def test_hue_kws(self):
+
+        kws = dict(marker=["o", "s", "D"])
+        g = ag.FacetGrid(self.df, hue="c", hue_kws=kws)
+        g.map(plt.plot, "x", "y")
+
+        for line, marker in zip(g.axes[0, 0].lines, kws["marker"]):
+            nt.assert_equal(line.get_marker(), marker)
+
     def test_dropna(self):
 
         df = self.df.copy()
@@ -481,6 +497,15 @@ class TestPairGrid(object):
 
         g = ag.PairGrid(self.df)
         nt.assert_is(g.data, self.df)
+        plt.close("all")
+
+    def test_ignore_datelike_data(self):
+
+        df = self.df.copy()
+        df['date'] = pd.date_range('2010-01-01', periods=len(df), freq='d')
+        result = ag.PairGrid(self.df).data
+        expected = df.drop('date', axis=1)
+        tm.assert_frame_equal(result, expected)
         plt.close("all")
 
     def test_self_fig(self):
@@ -743,6 +768,47 @@ class TestPairGrid(object):
 
         plt.close("all")
 
+    def test_hue_kws(self):
+
+        kws = dict(marker=["o", "s", "d", "+"])
+        g = ag.PairGrid(self.df, hue="a", hue_kws=kws)
+        g.map(plt.plot)
+
+        for line, marker in zip(g.axes[0, 0].lines, kws["marker"]):
+            nt.assert_equal(line.get_marker(), marker)
+
+    def test_nondefault_index(self):
+
+        df = self.df.copy().set_index("b")
+
+        vars = ["x", "y", "z"]
+        g1 = ag.PairGrid(df)
+        g1.map(plt.scatter)
+
+        for i, axes_i in enumerate(g1.axes):
+            for j, ax in enumerate(axes_i):
+                x_in = self.df[vars[j]]
+                y_in = self.df[vars[i]]
+                x_out, y_out = ax.collections[0].get_offsets().T
+                npt.assert_array_equal(x_in, x_out)
+                npt.assert_array_equal(y_in, y_out)
+
+        g2 = ag.PairGrid(df, "a")
+        g2.map(plt.scatter)
+
+        for i, axes_i in enumerate(g2.axes):
+            for j, ax in enumerate(axes_i):
+                x_in = self.df[vars[j]]
+                y_in = self.df[vars[i]]
+                for k, k_level in enumerate("abcd"):
+                    x_in_k = x_in[self.df.a == k_level]
+                    y_in_k = y_in[self.df.a == k_level]
+                    x_out, y_out = ax.collections[k].get_offsets().T
+                npt.assert_array_equal(x_in_k, x_out)
+                npt.assert_array_equal(y_in_k, y_out)
+
+        plt.close("all")
+
     @skipif(old_matplotlib)
     def test_pairplot(self):
 
@@ -841,6 +907,18 @@ class TestPairGrid(object):
             nt.assert_equal(len(ax.collections), 0)
 
         plt.close("all")
+
+    @skipif(old_matplotlib)
+    def test_pairplot_markers(self):
+
+        vars = ["x", "y", "z"]
+        markers = ["o", "x", "s", "d"]
+        g = pairplot(self.df, hue="a", vars=vars, markers=markers)
+        nt.assert_equal(g.hue_kws["marker"], markers)
+        plt.close("all")
+
+        with nt.assert_raises(ValueError):
+            g = pairplot(self.df, hue="a", vars=vars, markers=markers[:-2])
 
     @classmethod
     def teardown_class(cls):

@@ -12,6 +12,7 @@ Some of the features that seaborn offers are
 - Tools for choosing color palettes to make beautiful plots that reveal patterns in your data
 - Functions for visualizing univariate and bivariate distributions or for comparing them between subsets of data
 - Tools that fit and visualize linear regression models for different kinds of independent and dependent variables
+- Functions that visualize matrices of data and use clustering algorithms to discover structure in those matrices
 - A function to plot statistical timeseries data with flexible estimation and representation of uncertainty around the estimate
 - High-level abstractions for structuring grids of plots that let you easily build complex visualizations
 """
@@ -22,16 +23,16 @@ MAINTAINER_EMAIL = 'mwaskom@stanford.edu'
 URL = 'http://stanford.edu/~mwaskom/software/seaborn/'
 LICENSE = 'BSD (3-clause)'
 DOWNLOAD_URL = 'https://github.com/mwaskom/seaborn/'
-VERSION = '0.4.0'
+VERSION = '0.5.1'
 
 try:
     from setuptools import setup
     _has_setuptools = True
 except ImportError:
-    from disutils import setup
-
+    from distutils.core import setup
 
 def check_dependencies():
+    install_requires = []
 
     # Just make sure dependencies exist, I haven't rigorously
     # tested what the minimal versions that will work are
@@ -39,32 +40,33 @@ def check_dependencies():
     try:
         import numpy
     except ImportError:
-        raise ImportError("seaborn requires numpy")
+        install_requires.append('numpy')
     try:
         import scipy
     except ImportError:
-        raise ImportError("seaborn requires scipy")
+        install_requires.append('scipy')
     try:
         import matplotlib
     except ImportError:
-        raise ImportError("seaborn requires matplotlib")
+        install_requires.append('matplotlib')
     try:
         import pandas
     except ImportError:
-        raise ImportError("seaborn requires pandas")
+        install_requires.append('pandas')
+
+    return install_requires
 
 if __name__ == "__main__":
+
     import os
     if os.path.exists('MANIFEST'):
         os.remove('MANIFEST')
 
-    import sys
-    if not (len(sys.argv) >= 2 and ('--help' in sys.argv[1:] or
-            sys.argv[1] in ('--help-commands', 'egg_info', '--version',
-                            'clean'))):
-        check_dependencies()
+    install_requires = check_dependencies()
 
     setup(name=DISTNAME,
+        author=MAINTAINER,
+        author_email=MAINTAINER_EMAIL,
         maintainer=MAINTAINER,
         maintainer_email=MAINTAINER_EMAIL,
         description=DESCRIPTION,
@@ -73,6 +75,7 @@ if __name__ == "__main__":
         url=URL,
         version=VERSION,
         download_url=DOWNLOAD_URL,
+        install_requires=install_requires,
         packages=['seaborn', 'seaborn.external', 'seaborn.tests'],
         classifiers=[
                      'Intended Audience :: Science/Research',

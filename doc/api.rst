@@ -35,6 +35,15 @@ Distribution plots
     kdeplot
     rugplot
 
+Matrix plots
+------------
+
+.. autosummary::
+   :toctree: generated/
+
+    heatmap
+    clustermap
+
 Timeseries plots
 ----------------
 
@@ -83,14 +92,27 @@ Color palettes
 
     set_palette
     color_palette
-    hls_palette
     husl_palette
-    mpl_palette
-    dark_palette
-    blend_palette
+    hls_palette
     cubehelix_palette
-    choose_cubehelix
+    dark_palette
+    light_palette
+    diverging_palette
+    blend_palette
     xkcd_palette
+    mpl_palette
+
+Palette widgets
+---------------
+
+.. autosummary::
+    :toctree: generated/
+
+    choose_colorbrewer_palette
+    choose_cubehelix_palette
+    choose_light_palette
+    choose_dark_palette
+    choose_diverging_palette
 
 
 Utility functions

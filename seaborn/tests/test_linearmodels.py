@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import pandas as pd
 
@@ -6,6 +7,7 @@ import nose.tools as nt
 import numpy.testing as npt
 import pandas.util.testing as pdt
 from numpy.testing.decorators import skipif
+from nose import SkipTest
 
 try:
     import statsmodels.api as sm
@@ -101,7 +103,7 @@ class TestRegressionPlotter(object):
     df["z"] = df.y + rs.randn(60)
     df["y_na"] = df.y.copy()
 
-    bw_err = rs.randn(6)[df.s.values]
+    bw_err = rs.randn(6)[df.s.values] * 2
     df.y += bw_err
 
     p = 1 / (1 + np.exp(-(df.x * 2 + rs.randn(60))))
@@ -281,11 +283,14 @@ class TestRegressionPlotter(object):
         x, y, ci = p.estimate_data
 
         npt.assert_array_equal(x, np.sort(np.unique(self.df.d)))
-        npt.assert_array_equal(y, self.df.groupby("d").y.mean())
+        npt.assert_array_almost_equal(y, self.df.groupby("d").y.mean())
         npt.assert_array_less(np.array(ci)[:, 0], y)
         npt.assert_array_less(y, np.array(ci)[:, 1])
 
     def test_estimate_cis(self):
+
+        # set known good seed to avoid the test stochastically failing
+        np.random.seed(123)
 
         p = lm._RegressionPlotter(self.df.d, self.df.y,
                                   x_estimator=np.mean, ci=95)
@@ -303,7 +308,11 @@ class TestRegressionPlotter(object):
 
     def test_estimate_units(self):
 
-        p = lm._RegressionPlotter("x", "y", data=self.df, units="s", x_bins=3)
+        # Seed the RNG locally
+        np.random.seed(345)
+
+        p = lm._RegressionPlotter("x", "y", data=self.df,
+                                  units="s", x_bins=3)
         _, _, ci_big = p.estimate_data
         ci_big = np.diff(ci_big, axis=1)
 
@@ -564,7 +573,7 @@ class TestDiscretePlotter(object):
         npt.assert_array_equal(pos, [0, 1, 2])
 
         height_want = self.df.groupby("x").y.mean()
-        npt.assert_array_equal(height, height_want)
+        npt.assert_array_almost_equal(height, height_want)
 
         get_cis = lambda x: utils.ci(algo.bootstrap(x, random_seed=0), 95)
         ci_want = np.array(self.df.groupby("x").y.apply(get_cis).tolist())
@@ -580,7 +589,7 @@ class TestDiscretePlotter(object):
         npt.assert_array_equal(pos, [-.2, .8, 1.8])
 
         height_want = first_hue.groupby("x").y.mean()
-        npt.assert_array_equal(height, height_want)
+        npt.assert_array_almost_equal(height, height_want)
 
         ci_want = np.array(first_hue.groupby("x").y.apply(get_cis).tolist())
         npt.assert_array_almost_equal(np.squeeze(ci), ci_want, 1)
@@ -591,7 +600,7 @@ class TestDiscretePlotter(object):
         npt.assert_array_equal(pos, [.2, 1.2, 2.2])
 
         height_want = second_hue.groupby("x").y.mean()
-        npt.assert_array_equal(height, height_want)
+        npt.assert_array_almost_equal(height, height_want)
 
         ci_want = np.array(second_hue.groupby("x").y.apply(get_cis).tolist())
         npt.assert_array_almost_equal(np.squeeze(ci), ci_want, 1)
@@ -708,7 +717,7 @@ class TestDiscretePlots(object):
 
         x, y = ax.collections[0].get_offsets().T
         npt.assert_array_equal(x, np.arange(3))
-        npt.assert_array_equal(y, self.df.groupby("x").y.mean())
+        npt.assert_array_almost_equal(y, self.df.groupby("x").y.mean())
 
         f, ax = plt.subplots()
         lm.pointplot("x", "y", "g", data=self.df, join=False, ax=ax)
@@ -716,7 +725,7 @@ class TestDiscretePlots(object):
         x, y = ax.collections[0].get_offsets().T
         npt.assert_array_equal(x, np.arange(3))
         expected_y = self.df[self.df.g == "x"].groupby("x").y.mean()
-        npt.assert_array_equal(y, expected_y)
+        npt.assert_array_almost_equal(y, expected_y)
 
         plt.close("all")
 
@@ -889,6 +898,8 @@ class TestRegressionPlots(object):
         ax = lm.regplot("x", "y", self.df, scatter_kws={'color': color})
         nt.assert_equal(ax.collections[0]._alpha, 0.8)
 
+        plt.close("all")
+
     def test_regplot_binned(self):
 
         ax = lm.regplot("x", "y", self.df, x_bins=5)
@@ -919,6 +930,32 @@ class TestRegressionPlots(object):
         nt.assert_equal(len(ax.collections), 4)
         plt.close("all")
 
+    def test_lmplot_markers(self):
+
+        g1 = lm.lmplot("x", "y", data=self.df, hue="h", markers="s")
+        nt.assert_equal(g1.hue_kws, {"marker": ["s", "s"]})
+
+        g2 = lm.lmplot("x", "y", data=self.df, hue="h", markers=["o", "s"])
+        nt.assert_equal(g2.hue_kws, {"marker": ["o", "s"]})
+
+        with nt.assert_raises(ValueError):
+            lm.lmplot("x", "y", data=self.df, hue="h", markers=["o", "s", "d"])
+
+        plt.close("all")
+
+    def test_lmplot_marker_linewidths(self):
+
+        if mpl.__version__ == "1.4.2":
+            raise SkipTest
+
+        g = lm.lmplot("x", "y", data=self.df, hue="h",
+                      fit_reg=False, markers=["o", "+"])
+        c = g.axes[0, 0].collections
+        nt.assert_equal(c[0].get_linewidths()[0], 0)
+        rclw = mpl.rcParams["lines.linewidth"]
+        nt.assert_equal(c[1].get_linewidths()[0], rclw)
+        plt.close("all")
+
     def test_lmplot_facets(self):
 
         g = lm.lmplot("x", "y", data=self.df, row="g", col="h")
@@ -929,7 +966,12 @@ class TestRegressionPlots(object):
 
         g = lm.lmplot("x", "y", data=self.df, hue="h", col="u")
         nt.assert_equal(g.axes.shape, (1, 6))
+        plt.close("all")
 
+    def test_lmplot_hue_col_nolegend(self):
+
+        g = lm.lmplot("x", "y", data=self.df, col="h", hue="h")
+        nt.assert_is(g._legend, None)
         plt.close("all")
 
     def test_lmplot_scatter_kws(self):
@@ -940,6 +982,8 @@ class TestRegressionPlots(object):
         red, blue = color_palette(n_colors=2)
         npt.assert_array_equal(red, red_scatter.get_facecolors()[0, :3])
         npt.assert_array_equal(blue, blue_scatter.get_facecolors()[0, :3])
+
+        plt.close("all")
 
     def test_residplot(self):
 
