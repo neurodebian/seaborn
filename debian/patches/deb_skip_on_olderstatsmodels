@@ -1,0 +1,105 @@
+--- a/seaborn/distributions.py
++++ b/seaborn/distributions.py
+@@ -9,8 +9,18 @@ import matplotlib.pyplot as plt
+ import warnings
+ 
+ try:
++    import statsmodels
+     import statsmodels.api as sm
+     _has_statsmodels = True
++
++    from distutils.version import LooseVersion as LV
++    _has_statsmodels_ge_0_6 = LV(statsmodels.__version__) >= LV("0.6")
++
++    def needs_statsmodels_0_6():
++        if not _has_statsmodels_ge_0_6:
++            raise RuntimeError("This functionality requires statsmodels 0.6"
++                               " or later. You have %s" % statsmodels.__version__)
++
+ except ImportError:
+     _has_statsmodels = False
+ 
+@@ -670,6 +680,7 @@ def _univariate_kdeplot(data, shade, ver
+ def _statsmodels_univariate_kde(data, kernel, bw, gridsize, cut, clip,
+                                 cumulative=False):
+     """Compute a univariate kernel density estimate using statsmodels."""
++    needs_statsmodels_0_6()
+     fft = kernel == "gau"
+     kde = sm.nonparametric.KDEUnivariate(data)
+     kde.fit(kernel, bw, fft, gridsize=gridsize, cut=cut, clip=clip)
+@@ -738,6 +749,7 @@ def _bivariate_kdeplot(x, y, filled, ker
+ 
+ def _statsmodels_bivariate_kde(x, y, bw, gridsize, cut, clip):
+     """Compute a bivariate kde using statsmodels."""
++    needs_statsmodels_0_6()
+     if isinstance(bw, str):
+         bw_func = getattr(sm.nonparametric.bandwidths, "bw_" + bw)
+         x_bw = bw_func(x)
+--- a/seaborn/tests/test_distributions.py
++++ b/seaborn/tests/test_distributions.py
+@@ -195,6 +195,7 @@ class TestKDE(object):
+                                        self.cut, self.clip)
+ 
+     @skipif(_no_statsmodels)
++    @skipif(not dist._has_statsmodels_ge_0_6)
+     def test_statsmodels_univariate_kde(self):
+         """Test the univariate KDE estimation with statsmodels."""
+         grid, y = dist._statsmodels_univariate_kde(self.x, self.kernel,
+@@ -217,6 +218,7 @@ class TestKDE(object):
+         nt.assert_equal(len(z), self.gridsize)
+ 
+     @skipif(_no_statsmodels)
++    @skipif(not dist._has_statsmodels_ge_0_6)
+     def test_statsmodels_bivariate_kde(self):
+         """Test the bivariate KDE estimation with statsmodels."""
+         clip = [self.clip, self.clip]
+@@ -228,6 +230,7 @@ class TestKDE(object):
+         nt.assert_equal(len(z), self.gridsize)
+ 
+     @skipif(_no_statsmodels)
++    @skipif(not dist._has_statsmodels_ge_0_6)
+     def test_statsmodels_kde_cumulative(self):
+         """Test computation of cumulative KDE."""
+         grid, y = dist._statsmodels_univariate_kde(self.x, self.kernel,
+@@ -302,6 +305,7 @@ class TestJointPlot(object):
+ 
+         plt.close("all")
+ 
++    @skipif(not dist._has_statsmodels_ge_0_6)
+     def test_reg(self):
+ 
+         g = dist.jointplot("x", "y", self.data, kind="reg")
+@@ -346,6 +350,7 @@ class TestJointPlot(object):
+ 
+         plt.close("all")
+ 
++    @skipif(not dist._has_statsmodels_ge_0_6)
+     def test_kde(self):
+ 
+         g = dist.jointplot("x", "y", self.data, kind="kde")
+--- a/seaborn/tests/test_axisgrid.py
++++ b/seaborn/tests/test_axisgrid.py
+@@ -12,6 +12,7 @@ from numpy.testing.decorators import ski
+ from .. import axisgrid as ag
+ from .. import rcmod
+ from ..palettes import color_palette
++from .. import distributions as dist
+ from ..distributions import kdeplot
+ from ..linearmodels import pointplot, pairplot
+ 
+@@ -930,6 +931,7 @@ class TestJointGrid(object):
+         npt.assert_array_equal(y, self.y)
+         plt.close("all")
+ 
++    @skipif(not dist._has_statsmodels_ge_0_6)
+     def test_univariate_plot(self):
+ 
+         g = ag.JointGrid("x", "x", self.data)
+@@ -940,6 +942,7 @@ class TestJointGrid(object):
+         npt.assert_array_equal(y1, y2)
+         plt.close("all")
+ 
++    @skipif(not dist._has_statsmodels_ge_0_6)
+     def test_plot(self):
+ 
+         g = ag.JointGrid("x", "x", self.data)
