@@ -1,6 +1,11 @@
 #! /usr/bin/env python
 #
 # Copyright (C) 2012-2014 Michael Waskom <mwaskom@stanford.edu>
+import os
+# temporarily redirect config directory to prevent matplotlib importing
+# testing that for writeable directory which results in sandbox error in
+# certain easy_install versions
+os.environ["MPLCONFIGDIR"] = "."
 
 DESCRIPTION = "Seaborn: statistical data visualization"
 LONG_DESCRIPTION = """\
@@ -23,7 +28,7 @@ MAINTAINER_EMAIL = 'mwaskom@stanford.edu'
 URL = 'http://stanford.edu/~mwaskom/software/seaborn/'
 LICENSE = 'BSD (3-clause)'
 DOWNLOAD_URL = 'https://github.com/mwaskom/seaborn/'
-VERSION = '0.5.1'
+VERSION = '0.6.0'
 
 try:
     from setuptools import setup
@@ -57,10 +62,6 @@ def check_dependencies():
     return install_requires
 
 if __name__ == "__main__":
-
-    import os
-    if os.path.exists('MANIFEST'):
-        os.remove('MANIFEST')
 
     install_requires = check_dependencies()
 

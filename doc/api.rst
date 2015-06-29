@@ -5,22 +5,7 @@
 API reference
 =============
 
-Linear model plots
-------------------
-
-.. autosummary::
-    :toctree: generated/
-
-    lmplot
-    factorplot
-    pairplot
-    regplot
-    interactplot
-    residplot
-    pointplot
-    barplot
-    coefplot
-    corrplot
+.. _distribution_api:
 
 Distribution plots
 ------------------
@@ -29,11 +14,42 @@ Distribution plots
     :toctree: generated/
 
     jointplot
-    boxplot
-    violinplot
+    pairplot
     distplot
     kdeplot
     rugplot
+
+.. _regression_api:
+
+Regression plots
+----------------
+
+.. autosummary::
+    :toctree: generated/
+
+    lmplot
+    regplot
+    residplot
+    interactplot
+    coefplot
+
+.. _categorical_api:
+
+Categorical plots
+-----------------
+
+.. autosummary::
+    :toctree: generated/
+
+    factorplot
+    boxplot
+    violinplot
+    stripplot
+    pointplot
+    barplot
+    countplot
+
+.. _matrix_api:
 
 Matrix plots
 ------------
@@ -60,6 +76,8 @@ Miscellaneous plots
 
     palplot
 
+.. _grid_api:
+
 Axis grids
 ----------
 
@@ -69,6 +87,8 @@ Axis grids
     FacetGrid
     PairGrid
     JointGrid
+
+.. _style_api:
 
 Style frontend
 --------------
@@ -81,8 +101,11 @@ Style frontend
     set_style
     plotting_context
     set_context
+    set_color_codes
     reset_defaults
     reset_orig
+
+.. _palette_api:
 
 Color palettes
 --------------
@@ -100,6 +123,7 @@ Color palettes
     diverging_palette
     blend_palette
     xkcd_palette
+    crayon_palette
     mpl_palette
 
 Palette widgets
