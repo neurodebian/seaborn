@@ -1,6 +1,8 @@
 seaborn (0.6.0-1) unstable; urgency=medium
 
   * Fresh upstream release
+  * debian/rules
+    - fake http*_proxy to prevent online interactions at build time
 
  -- Yaroslav Halchenko <debian@onerussian.com>  Mon, 29 Jun 2015 13:13:55 -0400
 

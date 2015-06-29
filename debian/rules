@@ -5,6 +5,9 @@ DH_VERBOSE=1
 export PYBUILD_NAME=seaborn
 export PYBUILD_TEST_NOSE=1
 
+export  http_proxy=http://127.0.0.1:9/
+export  https_proxy=http://127.0.0.1:9/
+
 %:
 	dh $@ --with python2,python3 --buildsystem=pybuild
 
