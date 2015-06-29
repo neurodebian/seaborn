@@ -1,3 +1,9 @@
+seaborn (0.6.0-1) unstable; urgency=medium
+
+  * Fresh upstream release
+
+ -- Yaroslav Halchenko <debian@onerussian.com>  Mon, 29 Jun 2015 13:13:55 -0400
+
 seaborn (0.5.1-1) experimental; urgency=medium
 
   * New upstream release (Closes: #774809)
