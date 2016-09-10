@@ -6,6 +6,8 @@ from scipy import stats
 import pandas as pd
 from pandas.core.series import remove_na
 import matplotlib as mpl
+from matplotlib.collections import PatchCollection
+import matplotlib.patches as Patches
 import matplotlib.pyplot as plt
 import warnings
 
@@ -13,10 +15,14 @@ from .external.six import string_types
 from .external.six.moves import range
 
 from . import utils
-from .utils import desaturate, iqr, categorical_order
+from .utils import iqr, categorical_order
 from .algorithms import bootstrap
 from .palettes import color_palette, husl_palette, light_palette
 from .axisgrid import FacetGrid, _facet_docs
+
+
+__all__ = ["boxplot", "violinplot", "stripplot", "swarmplot", "lvplot",
+           "pointplot", "barplot", "countplot", "factorplot"]
 
 
 class _CategoricalPlotter(object):
@@ -141,7 +147,7 @@ class _CategoricalPlotter(object):
             # Validate the inputs
             for input in [x, y, hue, units]:
                 if isinstance(input, string_types):
-                    err = "Could not interperet input '{}'".format(input)
+                    err = "Could not interpret input '{}'".format(input)
                     raise ValueError(err)
 
             # Figure out the plotting orientation
@@ -261,7 +267,7 @@ class _CategoricalPlotter(object):
         if color is None and palette is None:
             # Determine whether the current palette will have enough values
             # If not, we'll default to the husl palette so each is distinct
-            current_palette = mpl.rcParams["axes.color_cycle"]
+            current_palette = utils.get_color_cycle()
             if n_colors <= len(current_palette):
                 colors = color_palette(n_colors=n_colors)
             else:
@@ -288,20 +294,20 @@ class _CategoricalPlotter(object):
 
             colors = color_palette(palette, n_colors)
 
-        # Conver the colors to a common rgb representation
-        colors = [mpl.colors.colorConverter.to_rgb(c) for c in colors]
-
         # Desaturate a bit because these are patches
         if saturation < 1:
-            colors = [desaturate(c, saturation) for c in colors]
+            colors = color_palette(colors, desat=saturation)
+
+        # Conver the colors to a common representations
+        rgb_colors = color_palette(colors)
 
         # Determine the gray color to use for the lines framing the plot
-        light_vals = [colorsys.rgb_to_hls(*c)[1] for c in colors]
+        light_vals = [colorsys.rgb_to_hls(*c)[1] for c in rgb_colors]
         l = min(light_vals) * .6
-        gray = (l, l, l)
+        gray = mpl.colors.rgb2hex((l, l, l))
 
         # Assign object attributes
-        self.colors = colors
+        self.colors = rgb_colors
         self.gray = gray
 
     def infer_orient(self, x, y, orient=None):
@@ -431,6 +437,10 @@ class _BoxPlotter(_CategoricalPlotter):
         """Use matplotlib to draw a boxplot on an Axes."""
         vert = self.orient == "v"
 
+        props = {}
+        for obj in ["box", "whisker", "cap", "median", "flier"]:
+            props[obj] = kws.pop(obj + "props", {})
+
         for i, group_data in enumerate(self.plot_data):
 
             if self.plot_hues is None:
@@ -454,12 +464,11 @@ class _BoxPlotter(_CategoricalPlotter):
                                          widths=self.width,
                                          **kws)
                 color = self.colors[i]
-                self.restyle_boxplot(artist_dict, color, kws)
+                self.restyle_boxplot(artist_dict, color, props)
             else:
                 # Draw nested groups of boxes
                 offsets = self.hue_offsets
                 for j, hue_level in enumerate(self.hue_names):
-                    hue_mask = self.plot_hues[i] == hue_level
 
                     # Add a legend for this hue level
                     if not i:
@@ -469,6 +478,7 @@ class _BoxPlotter(_CategoricalPlotter):
                     if group_data.size == 0:
                         continue
 
+                    hue_mask = self.plot_hues[i] == hue_level
                     box_data = remove_na(group_data[hue_mask])
 
                     # Handle case where there is no non-null data
@@ -482,36 +492,36 @@ class _BoxPlotter(_CategoricalPlotter):
                                              positions=[center],
                                              widths=self.nested_width,
                                              **kws)
-                    self.restyle_boxplot(artist_dict, self.colors[j], kws)
+                    self.restyle_boxplot(artist_dict, self.colors[j], props)
                     # Add legend data, but just for one set of boxes
 
-    def restyle_boxplot(self, artist_dict, color, kws):
+    def restyle_boxplot(self, artist_dict, color, props):
         """Take a drawn matplotlib boxplot and make it look nice."""
         for box in artist_dict["boxes"]:
-            box.update(dict(color=color,
+            box.update(dict(facecolor=color,
                             zorder=.9,
                             edgecolor=self.gray,
                             linewidth=self.linewidth))
-            box.update(kws.get("boxprops", {}))
+            box.update(props["box"])
         for whisk in artist_dict["whiskers"]:
             whisk.update(dict(color=self.gray,
                               linewidth=self.linewidth,
                               linestyle="-"))
-            whisk.update(kws.get("whiskerprops", {}))
+            whisk.update(props["whisker"])
         for cap in artist_dict["caps"]:
             cap.update(dict(color=self.gray,
                             linewidth=self.linewidth))
-            cap.update(kws.get("capprops", {}))
+            cap.update(props["cap"])
         for med in artist_dict["medians"]:
             med.update(dict(color=self.gray,
                             linewidth=self.linewidth))
-            med.update(kws.get("medianprops", {}))
+            med.update(props["median"])
         for fly in artist_dict["fliers"]:
-            fly.update(dict(color=self.gray,
+            fly.update(dict(markerfacecolor=self.gray,
                             marker="d",
                             markeredgecolor=self.gray,
                             markersize=self.fliersize))
-            fly.update(kws.get("flierprops", {}))
+            fly.update(props["flier"])
 
     def plot(self, ax, boxplot_kws):
         """Make the plot."""
@@ -795,7 +805,7 @@ class _ViolinPlotter(_CategoricalPlotter):
                 fill_func(support,
                           grid - density * self.dwidth,
                           grid + density * self.dwidth,
-                          color=self.colors[i],
+                          facecolor=self.colors[i],
                           **kws)
 
                 # Draw the interior representation of the data
@@ -1008,7 +1018,7 @@ class _ViolinPlotter(_CategoricalPlotter):
     def draw_points(self, ax, data, center):
         """Draw individual observations as points at middle of the violin."""
         kws = dict(s=np.square(self.linewidth * 2),
-                   c=self.gray,
+                   color=self.gray,
                    edgecolor=self.gray)
 
         grid = np.ones(len(data)) * center
@@ -1055,7 +1065,46 @@ class _ViolinPlotter(_CategoricalPlotter):
             ax.invert_yaxis()
 
 
-class _StripPlotter(_CategoricalPlotter):
+class _CategoricalScatterPlotter(_CategoricalPlotter):
+
+    @property
+    def point_colors(self):
+        """Return a color for each scatter point based on group and hue."""
+        colors = []
+        for i, group_data in enumerate(self.plot_data):
+
+            # Initialize the array for this group level
+            group_colors = np.empty((group_data.size, 3))
+
+            if self.plot_hues is None:
+
+                # Use the same color for all points at this level
+                group_color = self.colors[i]
+                group_colors[:] = group_color
+
+            else:
+
+                # Color the points based on  the hue level
+                for j, level in enumerate(self.hue_names):
+                    hue_color = self.colors[j]
+                    if group_data.size:
+                        group_colors[self.plot_hues[i] == level] = hue_color
+
+            colors.append(group_colors)
+
+        return colors
+
+    def add_legend_data(self, ax):
+        """Add empty scatterplot artists with labels for the legend."""
+        if self.hue_names is not None:
+            for rgb, label in zip(self.colors, self.hue_names):
+                ax.scatter([], [],
+                           color=mpl.colors.rgb2hex(rgb),
+                           label=label,
+                           s=60)
+
+
+class _StripPlotter(_CategoricalScatterPlotter):
     """1-d scatterplot with categorical organization."""
     def __init__(self, x, y, hue, data, order, hue_order,
                  jitter, split, orient, color, palette):
@@ -1079,63 +1128,277 @@ class _StripPlotter(_CategoricalPlotter):
         """Draw the points onto `ax`."""
         # Set the default zorder to 2.1, so that the points
         # will be drawn on top of line elements (like in a boxplot)
-        kws.setdefault("zorder", 2.1)
         for i, group_data in enumerate(self.plot_data):
-            if self.plot_hues is None:
+            if self.plot_hues is None or not self.split:
 
-                # Determine the positions of the points
-                strip_data = remove_na(group_data)
-                jitter = self.jitterer(len(strip_data))
-                kws["color"] = self.colors[i]
-
-                # Draw the plot
-                if self.orient == "v":
-                    ax.scatter(i + jitter, strip_data, **kws)
+                if self.hue_names is None:
+                    hue_mask = np.ones(group_data.size, np.bool)
                 else:
-                    ax.scatter(strip_data, i + jitter, **kws)
+                    hue_mask = np.array([h in self.hue_names
+                                         for h in self.plot_hues[i]], np.bool)
+                    # Broken on older numpys
+                    # hue_mask = np.in1d(self.plot_hues[i], self.hue_names)
+
+                strip_data = group_data[hue_mask]
+
+                # Plot the points in centered positions
+                cat_pos = np.ones(strip_data.size) * i
+                cat_pos += self.jitterer(len(strip_data))
+                kws.update(c=self.point_colors[i][hue_mask])
+                if self.orient == "v":
+                    ax.scatter(cat_pos, strip_data, **kws)
+                else:
+                    ax.scatter(strip_data, cat_pos, **kws)
 
             else:
                 offsets = self.hue_offsets
                 for j, hue_level in enumerate(self.hue_names):
                     hue_mask = self.plot_hues[i] == hue_level
-                    if not hue_mask.any():
-                        continue
+                    strip_data = group_data[hue_mask]
 
-                    # Determine the positions of the points
-                    strip_data = remove_na(group_data[hue_mask])
-                    pos = i + offsets[j] if self.split else i
-                    jitter = self.jitterer(len(strip_data))
-                    kws["color"] = self.colors[j]
-
-                    # Only label one set of plots
-                    if i:
-                        kws.pop("label", None)
-                    else:
-                        kws["label"] = hue_level
-
-                    # Draw the plot
+                    # Plot the points in centered positions
+                    center = i + offsets[j]
+                    cat_pos = np.ones(strip_data.size) * center
+                    cat_pos += self.jitterer(len(strip_data))
+                    kws.update(c=self.point_colors[i][hue_mask])
                     if self.orient == "v":
-                        ax.scatter(pos + jitter, strip_data, **kws)
+                        ax.scatter(cat_pos, strip_data, **kws)
                     else:
-                        ax.scatter(strip_data, pos + jitter, **kws)
+                        ax.scatter(strip_data, cat_pos, **kws)
 
     def plot(self, ax, kws):
         """Make the plot."""
         self.draw_stripplot(ax, kws)
+        self.add_legend_data(ax)
         self.annotate_axes(ax)
         if self.orient == "h":
             ax.invert_yaxis()
 
 
-class _SwarmPlotter(_BoxPlotter):
+class _SwarmPlotter(_CategoricalScatterPlotter):
 
-    def __init__(self):
+    def __init__(self, x, y, hue, data, order, hue_order,
+                 split, orient, color, palette):
+        """Initialize the plotter."""
+        self.establish_variables(x, y, hue, data, orient, order, hue_order)
+        self.establish_colors(color, palette, 1)
 
-        pass
+        # Set object attributes
+        self.split = split
+        self.width = .8
 
-    def plot(self, ax):
+    def overlap(self, xy_i, xy_j, d):
+        """Return True if two circles with the same diameter will overlap."""
+        x_i, y_i = xy_i
+        x_j, y_j = xy_j
+        return ((x_i - x_j) ** 2 + (y_i - y_j) ** 2) < (d ** 2)
 
-        pass
+    def could_overlap(self, xy_i, swarm, d):
+        """Return a list of all swarm points that could overlap with target.
+
+        Assumes that swarm is a sorted list of all points below xy_i.
+        """
+        _, y_i = xy_i
+        neighbors = []
+        for xy_j in reversed(swarm):
+            _, y_j = xy_j
+            if (y_i - y_j) < d:
+                neighbors.append(xy_j)
+            else:
+                break
+        return list(reversed(neighbors))
+
+    def position_candidates(self, xy_i, neighbors, d):
+        """Return a list of (x, y) coordinates that might be valid."""
+        candidates = [xy_i]
+        x_i, y_i = xy_i
+        left_first = True
+        for x_j, y_j in neighbors:
+            dy = y_i - y_j
+            dx = np.sqrt(d ** 2 - dy ** 2) * 1.05
+            cl, cr = (x_j - dx, y_i), (x_j + dx, y_i)
+            if left_first:
+                new_candidates = [cl, cr]
+            else:
+                new_candidates = [cr, cl]
+            candidates.extend(new_candidates)
+            left_first = not left_first
+        return candidates
+
+    def prune_candidates(self, candidates, neighbors, d):
+        """Remove candidates from the list if they overlap with the swarm."""
+        good_candidates = []
+        for xy_i in candidates:
+            good_candidate = True
+            for xy_j in neighbors:
+                if self.overlap(xy_i, xy_j, d):
+                    good_candidate = False
+            if good_candidate:
+                good_candidates.append(xy_i)
+        return np.array(good_candidates)
+
+    def beeswarm(self, orig_xy, d):
+        """Adjust x position of points to avoid overlaps."""
+        # In this method, ``x`` is always the categorical axis
+        # Center of the swarm, in point coordinates
+        midline = orig_xy[0, 0]
+
+        # Start the swarm with the first point
+        swarm = [orig_xy[0]]
+
+        # Loop over the remaining points
+        for xy_i in orig_xy[1:]:
+
+            # Find the points in the swarm that could possibly
+            # overlap with the point we are currently placing
+            neighbors = self.could_overlap(xy_i, swarm, d)
+
+            # Find positions that would be valid individually
+            # with respect to each of the swarm neighbors
+            candidates = self.position_candidates(xy_i, neighbors, d)
+
+            # Remove the positions that overlap with any of the
+            # other neighbors
+            candidates = self.prune_candidates(candidates, neighbors, d)
+
+            # Find the most central of the remaining positions
+            offsets = np.abs(candidates[:, 0] - midline)
+            best_index = np.argmin(offsets)
+            new_xy_i = candidates[best_index]
+            swarm.append(new_xy_i)
+
+        return np.array(swarm)
+
+    def add_gutters(self, points, center, width):
+        """Stop points from extending beyond their territory."""
+        half_width = width / 2
+        low_gutter = center - half_width
+        off_low = points < low_gutter
+        if off_low.any():
+            points[off_low] = low_gutter
+        high_gutter = center + half_width
+        off_high = points > high_gutter
+        if off_high.any():
+            points[off_high] = high_gutter
+        return points
+
+    def swarm_points(self, ax, points, center, width, s, **kws):
+        """Find new positions on the categorical axis for each point."""
+        # Convert from point size (area) to diameter
+        default_lw = mpl.rcParams["patch.linewidth"]
+        lw = kws.get("linewidth", kws.get("lw", default_lw))
+        d = np.sqrt(s) + lw
+
+        # Transform the data coordinates to point coordinates.
+        # We'll figure out the swarm positions in the latter
+        # and then convert back to data coordinates and replot
+        orig_xy = ax.transData.transform(points.get_offsets())
+
+        # Order the variables so that x is the caegorical axis
+        if self.orient == "h":
+            orig_xy = orig_xy[:, [1, 0]]
+
+        # Do the beeswarm in point coordinates
+        new_xy = self.beeswarm(orig_xy, d)
+
+        # Transform the point coordinates back to data coordinates
+        if self.orient == "h":
+            new_xy = new_xy[:, [1, 0]]
+        new_x, new_y = ax.transData.inverted().transform(new_xy).T
+
+        # Add gutters
+        if self.orient == "v":
+            self.add_gutters(new_x, center, width)
+        else:
+            self.add_gutters(new_y, center, width)
+
+        # Reposition the points so they do not overlap
+        points.set_offsets(np.c_[new_x, new_y])
+
+    def draw_swarmplot(self, ax, kws):
+        """Plot the data."""
+        s = kws.pop("s")
+
+        centers = []
+        swarms = []
+
+        # Set the categorical axes limits here for the swarm math
+        if self.orient == "v":
+            ax.set_xlim(-.5, len(self.plot_data) - .5)
+        else:
+            ax.set_ylim(-.5, len(self.plot_data) - .5)
+
+        # Plot each swarm
+        for i, group_data in enumerate(self.plot_data):
+
+            if self.plot_hues is None or not self.split:
+
+                width = self.width
+
+                if self.hue_names is None:
+                    hue_mask = np.ones(group_data.size, np.bool)
+                else:
+                    hue_mask = np.array([h in self.hue_names
+                                         for h in self.plot_hues[i]], np.bool)
+                    # Broken on older numpys
+                    # hue_mask = np.in1d(self.plot_hues[i], self.hue_names)
+
+                swarm_data = group_data[hue_mask]
+
+                # Sort the points for the beeswarm algorithm
+                sorter = np.argsort(swarm_data)
+                swarm_data = swarm_data[sorter]
+                point_colors = self.point_colors[i][hue_mask][sorter]
+
+                # Plot the points in centered positions
+                cat_pos = np.ones(swarm_data.size) * i
+                kws.update(c=point_colors)
+                if self.orient == "v":
+                    points = ax.scatter(cat_pos, swarm_data, s=s, **kws)
+                else:
+                    points = ax.scatter(swarm_data, cat_pos, s=s, **kws)
+
+                centers.append(i)
+                swarms.append(points)
+
+            else:
+                offsets = self.hue_offsets
+                width = self.nested_width
+
+                for j, hue_level in enumerate(self.hue_names):
+                    hue_mask = self.plot_hues[i] == hue_level
+                    swarm_data = group_data[hue_mask]
+
+                    # Sort the points for the beeswarm algorithm
+                    sorter = np.argsort(swarm_data)
+                    swarm_data = swarm_data[sorter]
+                    point_colors = self.point_colors[i][hue_mask][sorter]
+
+                    # Plot the points in centered positions
+                    center = i + offsets[j]
+                    cat_pos = np.ones(swarm_data.size) * center
+                    kws.update(c=point_colors)
+                    if self.orient == "v":
+                        points = ax.scatter(cat_pos, swarm_data, s=s, **kws)
+                    else:
+                        points = ax.scatter(swarm_data, cat_pos, s=s, **kws)
+
+                    centers.append(center)
+                    swarms.append(points)
+
+        # Update the position of each point on the categorical axis
+        # Do this after plotting so that the numerical axis limits are correct
+        for center, swarm in zip(centers, swarms):
+            if swarm.get_offsets().size:
+                self.swarm_points(ax, swarm, center, width, s, **kws)
+
+    def plot(self, ax, kws):
+        """Make the full plot."""
+        self.draw_swarmplot(ax, kws)
+        self.add_legend_data(ax)
+        self.annotate_axes(ax)
+        if self.orient == "h":
+            ax.invert_yaxis()
 
 
 class _CategoricalStatPlotter(_CategoricalPlotter):
@@ -1239,24 +1502,42 @@ class _CategoricalStatPlotter(_CategoricalPlotter):
             self.value_label = "{}({})".format(estimator.__name__,
                                                self.value_label)
 
-    def draw_confints(self, ax, at_group, confint, colors, **kws):
+    def draw_confints(self, ax, at_group, confint, colors,
+                      errwidth=None, capsize=None, **kws):
 
-        kws.setdefault("lw", mpl.rcParams["lines.linewidth"] * 1.8)
+        if errwidth is not None:
+            kws.setdefault("lw", errwidth)
+        else:
+            kws.setdefault("lw", mpl.rcParams["lines.linewidth"] * 1.8)
 
         for at, (ci_low, ci_high), color in zip(at_group,
                                                 confint,
                                                 colors):
             if self.orient == "v":
                 ax.plot([at, at], [ci_low, ci_high], color=color, **kws)
+                if capsize is not None:
+                    ax.plot([at - capsize / 2, at + capsize / 2],
+                            [ci_low, ci_low], color=color, **kws)
+                    ax.plot([at - capsize / 2, at + capsize / 2],
+                            [ci_high, ci_high], color=color, **kws)
             else:
                 ax.plot([ci_low, ci_high], [at, at], color=color, **kws)
+                if capsize is not None:
+                    ax.plot([ci_low, ci_low],
+                            [at - capsize / 2, at + capsize / 2],
+                            color=color, **kws)
+                    ax.plot([ci_high, ci_high],
+                            [at - capsize / 2, at + capsize / 2],
+                            color=color, **kws)
 
 
 class _BarPlotter(_CategoricalStatPlotter):
     """Show point estimates and confidence intervals with bars."""
+
     def __init__(self, x, y, hue, data, order, hue_order,
                  estimator, ci, n_boot, units,
-                 orient, color, palette, saturation, errcolor):
+                 orient, color, palette, saturation, errcolor, errwidth=None,
+                 capsize=None):
         """Initialize the plotter."""
         self.establish_variables(x, y, hue, data, orient,
                                  order, hue_order, units)
@@ -1264,6 +1545,8 @@ class _BarPlotter(_CategoricalStatPlotter):
         self.estimate_statistic(estimator, ci, n_boot)
 
         self.errcolor = errcolor
+        self.errwidth = errwidth
+        self.capsize = capsize
 
     def draw_bars(self, ax, kws):
         """Draw the bars onto `ax`."""
@@ -1279,7 +1562,12 @@ class _BarPlotter(_CategoricalStatPlotter):
 
             # Draw the confidence intervals
             errcolors = [self.errcolor] * len(barpos)
-            self.draw_confints(ax, barpos, self.confint, errcolors)
+            self.draw_confints(ax,
+                               barpos,
+                               self.confint,
+                               errcolors,
+                               self.errwidth,
+                               self.capsize)
 
         else:
 
@@ -1295,7 +1583,12 @@ class _BarPlotter(_CategoricalStatPlotter):
                 if self.confint.size:
                     confint = self.confint[:, j]
                     errcolors = [self.errcolor] * len(offpos)
-                    self.draw_confints(ax, offpos, confint, errcolors)
+                    self.draw_confints(ax,
+                                       offpos,
+                                       confint,
+                                       errcolors,
+                                       self.errwidth,
+                                       self.capsize)
 
     def plot(self, ax, bar_kws):
         """Make the plot."""
@@ -1310,7 +1603,7 @@ class _PointPlotter(_CategoricalStatPlotter):
     def __init__(self, x, y, hue, data, order, hue_order,
                  estimator, ci, n_boot, units,
                  markers, linestyles, dodge, join, scale,
-                 orient, color, palette):
+                 orient, color, palette, errwidth=None, capsize=None):
         """Initialize the plotter."""
         self.establish_variables(x, y, hue, data, orient,
                                  order, hue_order, units)
@@ -1343,6 +1636,8 @@ class _PointPlotter(_CategoricalStatPlotter):
         self.dodge = dodge
         self.join = join
         self.scale = scale
+        self.errwidth = errwidth
+        self.capsize = capsize
 
     @property
     def hue_offsets(self):
@@ -1375,8 +1670,8 @@ class _PointPlotter(_CategoricalStatPlotter):
                             color=color, ls=ls, lw=lw)
 
             # Draw the confidence intervals
-            self.draw_confints(ax, pointpos, self.confint, self.colors, lw=lw)
-
+            self.draw_confints(ax, pointpos, self.confint, self.colors,
+                               self.errwidth, self.capsize)
             # Draw the estimate points
             marker = self.markers[0]
             if self.orient == "h":
@@ -1416,7 +1711,8 @@ class _PointPlotter(_CategoricalStatPlotter):
                     confint = self.confint[:, j]
                     errcolors = [self.colors[j]] * len(offpos)
                     self.draw_confints(ax, offpos, confint, errcolors,
-                                       zorder=z, lw=lw)
+                                       self.errwidth, self.capsize,
+                                       zorder=z)
 
                 # Draw the estimate points
                 marker = self.markers[j]
@@ -1434,6 +1730,252 @@ class _PointPlotter(_CategoricalStatPlotter):
     def plot(self, ax):
         """Make the plot."""
         self.draw_points(ax)
+        self.annotate_axes(ax)
+        if self.orient == "h":
+            ax.invert_yaxis()
+
+
+class _LVPlotter(_CategoricalPlotter):
+
+    def __init__(self, x, y, hue, data, order, hue_order,
+                 orient, color, palette, saturation,
+                 width, k_depth, linewidth, scale, outlier_prop):
+
+        if width is None:
+            width = .8
+        self.width = width
+
+        if saturation is None:
+            saturation = .75
+        self.saturation = saturation
+
+        if k_depth is None:
+            k_depth = 'proportion'
+        self.k_depth = k_depth
+
+        if linewidth is None:
+            linewidth = mpl.rcParams["lines.linewidth"]
+        self.linewidth = linewidth
+
+        if scale is None:
+            scale = 'exponential'
+        self.scale = scale
+
+        self.outlier_prop = outlier_prop
+
+        self.establish_variables(x, y, hue, data, orient, order, hue_order)
+        self.establish_colors(color, palette, saturation)
+
+    def _lv_box_ends(self, vals, k_depth='proportion', outlier_prop=None):
+        """Get the number of data points and calculate `depth` of
+        letter-value plot."""
+        vals = np.asarray(vals)
+        vals = vals[np.isfinite(vals)]
+        n = len(vals)
+        # If p is not set, calculate it so that 8 points are outliers
+        if not outlier_prop:
+            # Conventional boxplots assume this proportion of the data are
+            # outliers.
+            p = 0.007
+        else:
+            if ((outlier_prop > 1.) or (outlier_prop < 0.)):
+                raise ValueError('outlier_prop not in range [0, 1]!')
+            p = outlier_prop
+        # Select the depth, i.e. number of boxes to draw, based on the method
+        k_dict = {'proportion': (np.log2(n)) - int(np.log2(n*p)) + 1,
+                  'tukey': (np.log2(n)) - 3,
+                  'trustworthy': (np.log2(n) -
+                                  np.log2(2*stats.norm.ppf((1-p))**2)) + 1}
+        k = k_dict[k_depth]
+        try:
+            k = int(k)
+        except ValueError:
+            k = 1
+        # If the number happens to be less than 0, set k to 0
+        if k < 1.:
+            k = 1
+        # Calculate the upper box ends
+        upper = [100*(1 - 0.5**(i+2)) for i in range(k, -1, -1)]
+        # Calculate the lower box ends
+        lower = [100*(0.5**(i+2)) for i in range(k, -1, -1)]
+        # Stitch the box ends together
+        percentile_ends = [(i, j) for i, j in zip(lower, upper)]
+        box_ends = [np.percentile(vals, q) for q in percentile_ends]
+        return box_ends, k
+
+    def _lv_outliers(self, vals, k):
+        """Find the outliers based on the letter value depth."""
+        perc_ends = (100*(0.5**(k+2)), 100*(1 - 0.5**(k+2)))
+        edges = np.percentile(vals, perc_ends)
+        lower_out = vals[np.where(vals < edges[0])[0]]
+        upper_out = vals[np.where(vals > edges[1])[0]]
+        return np.concatenate((lower_out, upper_out))
+
+    def _width_functions(self, width_func):
+        # Dictionary of functions for computing the width of the boxes
+        width_functions = {'linear': lambda h, i, k: (i + 1.) / k,
+                           'exponential': lambda h, i, k: 2**(-k+i-1),
+                           'area': lambda h, i, k: (1 - 2**(-k+i-2)) / h}
+        return width_functions[width_func]
+
+    def _lvplot(self, box_data, positions,
+                color=[255. / 256., 185. / 256., 0.],
+                vert=True, widths=1, k_depth='proportion',
+                ax=None, outlier_prop=None, scale='exponential',
+                **kws):
+
+        x = positions[0]
+        box_data = np.asarray(box_data)
+
+        # If we only have one data point, plot a line
+        if len(box_data) == 1:
+            kws.update({'color': self.gray, 'linestyle': '-'})
+            ys = [box_data[0], box_data[0]]
+            xs = [x - widths / 2, x + widths / 2]
+            if vert:
+                xx, yy = xs, ys
+            else:
+                xx, yy = ys, xs
+            ax.plot(xx, yy, **kws)
+        else:
+            # Get the number of data points and calculate "depth" of
+            # letter-value plot
+            box_ends, k = self._lv_box_ends(box_data, k_depth=k_depth,
+                                            outlier_prop=outlier_prop)
+
+            # Anonymous functions for calculating the width and height
+            # of the letter value boxes
+            width = self._width_functions(scale)
+
+            # Function to find height of boxes
+            def height(b):
+                return b[1] - b[0]
+
+            # Functions to construct the letter value boxes
+            def vert_perc_box(x, b, i, k, w):
+                rect = Patches.Rectangle((x - widths*w / 2, b[0]),
+                                         widths*w,
+                                         height(b), fill=True)
+                return rect
+
+            def horz_perc_box(x, b, i, k, w):
+                rect = Patches.Rectangle((b[0], x - widths*w / 2),
+                                         height(b), widths*w,
+                                         fill=True)
+                return rect
+
+            # Scale the width of the boxes so the biggest starts at 1
+            w_area = np.array([width(height(b), i, k)
+                               for i, b in enumerate(box_ends)])
+            w_area = w_area / np.max(w_area)
+
+            # Calculate the medians
+            y = np.median(box_data)
+
+            # Calculate the outliers and plot
+            outliers = self._lv_outliers(box_data, k)
+
+            if vert:
+                boxes = [vert_perc_box(x, b[0], i, k, b[1])
+                         for i, b in enumerate(zip(box_ends, w_area))]
+
+                # Plot the medians
+                ax.plot([x - widths / 2, x + widths / 2], [y, y],
+                        c='.15', alpha=.45, **kws)
+
+                ax.scatter(np.repeat(x, len(outliers)), outliers,
+                           marker='d', c=mpl.colors.rgb2hex(color), **kws)
+            else:
+                boxes = [horz_perc_box(x, b[0], i, k, b[1])
+                         for i, b in enumerate(zip(box_ends, w_area))]
+
+                # Plot the medians
+                ax.plot([y, y], [x - widths / 2, x + widths / 2],
+                        c='.15', alpha=.45, **kws)
+
+                ax.scatter(outliers, np.repeat(x, len(outliers)),
+                           marker='d', c=color, **kws)
+
+            # Construct a color map from the input color
+            rgb = [[1, 1, 1], list(color)]
+            cmap = mpl.colors.LinearSegmentedColormap.from_list('new_map', rgb)
+            collection = PatchCollection(boxes, cmap=cmap)
+
+            # Set the color gradation
+            collection.set_array(np.array(np.linspace(0, 1, len(boxes))))
+
+            # Plot the boxes
+            ax.add_collection(collection)
+
+    def draw_letter_value_plot(self, ax, kws):
+        """Use matplotlib to draw a letter value plot on an Axes."""
+        vert = self.orient == "v"
+
+        for i, group_data in enumerate(self.plot_data):
+
+            if self.plot_hues is None:
+
+                # Handle case where there is data at this level
+                if group_data.size == 0:
+                    continue
+
+                # Draw a single box or a set of boxes
+                # with a single level of grouping
+                box_data = remove_na(group_data)
+
+                # Handle case where there is no non-null data
+                if box_data.size == 0:
+                    continue
+
+                color = self.colors[i]
+
+                artist_dict = self._lvplot(box_data,
+                                           positions=[i],
+                                           color=color,
+                                           vert=vert,
+                                           widths=self.width,
+                                           k_depth=self.k_depth,
+                                           ax=ax,
+                                           scale=self.scale,
+                                           outlier_prop=self.outlier_prop,
+                                           **kws)
+
+            else:
+                # Draw nested groups of boxes
+                offsets = self.hue_offsets
+                for j, hue_level in enumerate(self.hue_names):
+
+                    # Add a legend for this hue level
+                    if not i:
+                        self.add_legend_data(ax, self.colors[j], hue_level)
+
+                    # Handle case where there is data at this level
+                    if group_data.size == 0:
+                        continue
+
+                    hue_mask = self.plot_hues[i] == hue_level
+                    box_data = remove_na(group_data[hue_mask])
+
+                    # Handle case where there is no non-null data
+                    if box_data.size == 0:
+                        continue
+
+                    color = self.colors[j]
+                    center = i + offsets[j]
+                    artist_dict = self._lvplot(box_data,
+                                               positions=[center],
+                                               color=color,
+                                               vert=vert,
+                                               widths=self.nested_width,
+                                               k_depth=self.k_depth,
+                                               ax=ax,
+                                               scale=self.scale,
+                                               outlier_prop=self.outlier_prop,
+                                               **kws)
+
+    def plot(self, ax, boxplot_kws):
+        """Make the plot."""
+        self.draw_letter_value_plot(ax, boxplot_kws)
         self.annotate_axes(ax)
         if self.orient == "h":
             ax.invert_yaxis()
@@ -1466,7 +2008,7 @@ _categorical_docs = dict(
     x, y, hue : names of variables in ``data``
         Inputs for plotting long-form data. See examples for interpretation.\
         """),
-    data=dedent("""\
+    categorical_data=dedent("""\
     data : DataFrame, array, or list of arrays, optional
         Dataset for plotting. If ``x`` and ``y`` are absent, this is
         interpreted as wide-form. Otherwise it is expected to be long-form.\
@@ -1520,6 +2062,14 @@ _categorical_docs = dict(
         ``1`` if you want the plot colors to perfectly match the input color
         spec.\
     """),
+    capsize=dedent("""\
+         capsize : float, optional
+             Width of the "caps" on error bars.
+         """),
+    errwidth=dedent("""\
+         errwidth : float, optional
+             Thickness of error bar lines (and caps).\
+         """),
     width=dedent("""\
     width : float, optional
         Width of a full element when not using hue nesting, or width of all the
@@ -1547,7 +2097,11 @@ _categorical_docs = dict(
     """),
     stripplot=dedent("""\
     stripplot : A scatterplot where one variable is categorical. Can be used
-                in conjunction with a other plots to show each observation.\
+                in conjunction with other plots to show each observation.\
+    """),
+    swarmplot=dedent("""\
+    swarmplot : A categorical scatterplot where the points do not overlap. Can
+                be used with other plots to show each observation.\
     """),
     barplot=dedent("""\
     barplot : Show point estimates and confidence intervals using bars.\
@@ -1562,6 +2116,10 @@ _categorical_docs = dict(
     factorplot=dedent("""\
     factorplot : Combine categorical plots and a class:`FacetGrid`.\
     """),
+    lvplot=dedent("""\
+    lvplot : An extension of the boxplot for long-tailed and large data sets.
+    """),
+
     )
 
 _categorical_docs.update(_facet_docs)
@@ -1638,7 +2196,7 @@ boxplot.__doc__ = dedent("""\
     Parameters
     ----------
     {input_params}
-    {data}
+    {categorical_data}
     {order_vars}
     {orient}
     {color}
@@ -1670,6 +2228,7 @@ boxplot.__doc__ = dedent("""\
     --------
     {violinplot}
     {stripplot}
+    {swarmplot}
 
     Examples
     --------
@@ -1707,20 +2266,13 @@ boxplot.__doc__ = dedent("""\
         >>> ax = sns.boxplot(x="day", y="total_bill", hue="time",
         ...                  data=tips, linewidth=2.5)
 
-    Control box order by sorting the input data:
-
-    .. plot::
-        :context: close-figs
-
-        >>> ax = sns.boxplot(x="size", y="tip", data=tips.sort("size"))
-
     Control box order by passing an explicit order:
 
     .. plot::
         :context: close-figs
 
-        >>> ax = sns.boxplot(x="size", y="tip", data=tips,
-        ...                  order=np.arange(1, 7), palette="Blues_d")
+        >>> ax = sns.boxplot(x="time", y="tip", data=tips,
+        ...                  order=["Dinner", "Lunch"])
 
     Draw a boxplot for each numeric variable in a DataFrame:
 
@@ -1730,14 +2282,13 @@ boxplot.__doc__ = dedent("""\
         >>> iris = sns.load_dataset("iris")
         >>> ax = sns.boxplot(data=iris, orient="h", palette="Set2")
 
-    Use :func:`stripplot` to show the datapoints on top of the boxes:
+    Use :func:`swarmplot` to show the datapoints on top of the boxes:
 
     .. plot::
         :context: close-figs
 
         >>> ax = sns.boxplot(x="day", y="total_bill", data=tips)
-        >>> ax = sns.stripplot(x="day", y="total_bill", data=tips,
-        ...                    size=4, jitter=True, edgecolor="gray")
+        >>> ax = sns.swarmplot(x="day", y="total_bill", data=tips, color=".25")
 
     Draw a box plot on to a :class:`FacetGrid` to group within an additional
     categorical variable:
@@ -1821,7 +2372,7 @@ violinplot.__doc__ = dedent("""\
     Parameters
     ----------
     {input_params}
-    {data}
+    {categorical_data}
     {order_vars}
     bw : {{'scott', 'silverman', float}}, optional
         Either the name of a reference rule or the scale factor to use when
@@ -1871,6 +2422,7 @@ violinplot.__doc__ = dedent("""\
     --------
     {boxplot}
     {stripplot}
+    {swarmplot}
 
     Examples
     --------
@@ -1908,20 +2460,13 @@ violinplot.__doc__ = dedent("""\
         >>> ax = sns.violinplot(x="day", y="total_bill", hue="smoker",
         ...                     data=tips, palette="muted", split=True)
 
-    Control violin order by sorting the input data:
-
-    .. plot::
-        :context: close-figs
-
-        >>> ax = sns.violinplot(x="size", y="tip", data=tips.sort("size"))
-
     Control violin order by passing an explicit order:
 
     .. plot::
         :context: close-figs
 
-        >>> ax = sns.violinplot(x="size", y="tip", data=tips,
-        ...                     order=np.arange(1, 7), palette="Blues_d")
+        >>> ax = sns.violinplot(x="time", y="tip", data=tips,
+        ...                     order=["Dinner", "Lunch"])
 
     Scale the violin width by the number of observations in each bin:
 
@@ -1995,17 +2540,23 @@ violinplot.__doc__ = dedent("""\
 
 
 def stripplot(x=None, y=None, hue=None, data=None, order=None, hue_order=None,
-              jitter=False, split=True, orient=None, color=None, palette=None,
-              size=7, edgecolor="w", linewidth=1, ax=None, **kwargs):
+              jitter=False, split=False, orient=None, color=None, palette=None,
+              size=5, edgecolor="gray", linewidth=0, ax=None, **kwargs):
 
     plotter = _StripPlotter(x, y, hue, data, order, hue_order,
                             jitter, split, orient, color, palette)
     if ax is None:
         ax = plt.gca()
 
-    kwargs.update(dict(s=size ** 2, edgecolor=edgecolor, linewidth=linewidth))
+    kwargs.setdefault("zorder", 3)
+    size = kwargs.get("s", size)
+    if linewidth is None:
+        linewidth = size / 10
     if edgecolor == "gray":
-        kwargs["edgecolor"] = plotter.gray
+        edgecolor = plotter.gray
+    kwargs.update(dict(s=size ** 2,
+                       edgecolor=edgecolor,
+                       linewidth=linewidth))
 
     plotter.plot(ax, kwargs)
     return ax
@@ -2023,7 +2574,7 @@ stripplot.__doc__ = dedent("""\
     Parameters
     ----------
     {input_params}
-    {data}
+    {categorical_data}
     {order_vars}
     jitter : float, ``True``/``1`` is special-cased, optional
         Amount of jitter (only along the categorical axis) to apply. This
@@ -2056,6 +2607,7 @@ stripplot.__doc__ = dedent("""\
 
     See Also
     --------
+    {swarmplot}
     {boxplot}
     {violinplot}
 
@@ -2101,6 +2653,14 @@ stripplot.__doc__ = dedent("""\
         >>> ax = sns.stripplot(x="total_bill", y="day", data=tips,
         ...                    jitter=True)
 
+    Draw outlines around the points:
+
+    .. plot::
+        :context: close-figs
+
+        >>> ax = sns.stripplot(x="total_bill", y="day", data=tips,
+        ...                    jitter=True, linewidth=1)
+
     Nest the strips within a second categorical variable:
 
     .. plot::
@@ -2109,7 +2669,7 @@ stripplot.__doc__ = dedent("""\
         >>> ax = sns.stripplot(x="sex", y="total_bill", hue="day",
         ...                    data=tips, jitter=True)
 
-    Draw each level of the ``hue`` variable at the same location on the
+    Draw each level of the ``hue`` variable at different locations on the
     major categorical axis:
 
     .. plot::
@@ -2117,22 +2677,15 @@ stripplot.__doc__ = dedent("""\
 
         >>> ax = sns.stripplot(x="day", y="total_bill", hue="smoker",
         ...                    data=tips, jitter=True,
-        ...                    palette="Set2", split=False)
-
-    Control strip order by sorting the input data:
-
-    .. plot::
-        :context: close-figs
-
-        >>> ax = sns.stripplot(x="size", y="tip", data=tips.sort("size"))
+        ...                    palette="Set2", split=True)
 
     Control strip order by passing an explicit order:
 
     .. plot::
         :context: close-figs
 
-        >>> ax = sns.stripplot(x="size", y="tip", data=tips,
-        ...                    order=np.arange(1, 7), palette="Blues_d")
+        >>> ax = sns.stripplot(x="time", y="tip", data=tips,
+        ...                    order=["Dinner", "Lunch"])
 
     Draw strips with large points and different aesthetics:
 
@@ -2149,16 +2702,174 @@ stripplot.__doc__ = dedent("""\
         :context: close-figs
 
         >>> ax = sns.boxplot(x="tip", y="day", data=tips, whis=np.inf)
-        >>> ax = sns.stripplot(x="tip", y="day", data=tips, jitter=True)
+        >>> ax = sns.stripplot(x="tip", y="day", data=tips,
+        ...                    jitter=True, color=".3")
 
     Draw strips of observations on top of a violin plot:
 
     .. plot::
         :context: close-figs
 
+        >>> ax = sns.violinplot(x="day", y="total_bill", data=tips,
+        ...                     inner=None, color=".8")
+        >>> ax = sns.stripplot(x="day", y="total_bill", data=tips, jitter=True)
+
+    """).format(**_categorical_docs)
+
+
+def swarmplot(x=None, y=None, hue=None, data=None, order=None, hue_order=None,
+              split=False, orient=None, color=None, palette=None,
+              size=5, edgecolor="gray", linewidth=0, ax=None, **kwargs):
+
+    plotter = _SwarmPlotter(x, y, hue, data, order, hue_order,
+                            split, orient, color, palette)
+    if ax is None:
+        ax = plt.gca()
+
+    kwargs.setdefault("zorder", 3)
+    size = kwargs.get("s", size)
+    if linewidth is None:
+        linewidth = size / 10
+    if edgecolor == "gray":
+        edgecolor = plotter.gray
+    kwargs.update(dict(s=size ** 2,
+                       edgecolor=edgecolor,
+                       linewidth=linewidth))
+
+    plotter.plot(ax, kwargs)
+    return ax
+
+
+swarmplot.__doc__ = dedent("""\
+    Draw a categorical scatterplot with non-overlapping points.
+
+    This function is similar to :func:`stripplot`, but the points are adjusted
+    (only along the categorical axis) so that they don't overlap. This gives a
+    better representation of the distribution of values, although it does not
+    scale as well to large numbers of observations (both in terms of the
+    ability to show all the points and in terms of the computation needed
+    to arrange them).
+
+    This style of plot is often called a "beeswarm".
+
+    A swarm plot can be drawn on its own, but it is also a good complement
+    to a box or violin plot in cases where you want to show all observations
+    along with some representation of the underlying distribution.
+
+    Note that arranging the points properly requires an accurate transformation
+    between data and point coordinates. This means that non-default axis limits
+    should be set *before* drawing the swarm plot.
+
+    {main_api_narrative}
+
+    Parameters
+    ----------
+    {input_params}
+    {categorical_data}
+    {order_vars}
+    split : bool, optional
+        When using ``hue`` nesting, setting this to ``True`` will separate
+        the strips for different hue levels along the categorical axis.
+        Otherwise, the points for each level will be plotted in one swarm.
+    {orient}
+    {color}
+    {palette}
+    size : float, optional
+        Diameter of the markers, in points. (Although ``plt.scatter`` is used
+        to draw the points, the ``size`` argument here takes a "normal"
+        markersize and not size^2 like ``plt.scatter``.
+    edgecolor : matplotlib color, "gray" is special-cased, optional
+        Color of the lines around each point. If you pass ``"gray"``, the
+        brightness is determined by the color palette used for the body
+        of the points.
+    {linewidth}
+    {ax_in}
+
+    Returns
+    -------
+    {ax_out}
+
+    See Also
+    --------
+    {boxplot}
+    {violinplot}
+    {stripplot}
+    {factorplot}
+
+    Examples
+    --------
+
+    Draw a single horizontal swarm plot:
+
+    .. plot::
+        :context: close-figs
+
+        >>> import seaborn as sns
+        >>> sns.set_style("whitegrid")
+        >>> tips = sns.load_dataset("tips")
+        >>> ax = sns.swarmplot(x=tips["total_bill"])
+
+    Group the swarms by a categorical variable:
+
+    .. plot::
+        :context: close-figs
+
+        >>> ax = sns.swarmplot(x="day", y="total_bill", data=tips)
+
+    Draw horizontal swarms:
+
+    .. plot::
+        :context: close-figs
+
+        >>> ax = sns.swarmplot(x="total_bill", y="day", data=tips)
+
+    Color the points using a second categorical variable:
+
+    .. plot::
+        :context: close-figs
+
+        >>> ax = sns.swarmplot(x="day", y="total_bill", hue="sex", data=tips)
+
+    Split each level of the ``hue`` variable along the categorical axis:
+
+    .. plot::
+        :context: close-figs
+
+        >>> ax = sns.swarmplot(x="day", y="total_bill", hue="smoker",
+        ...                    data=tips, palette="Set2", split=True)
+
+    Control swarm order by passing an explicit order:
+
+    .. plot::
+        :context: close-figs
+
+        >>> ax = sns.swarmplot(x="time", y="tip", data=tips,
+        ...                    order=["Dinner", "Lunch"])
+
+    Plot using larger points:
+
+    .. plot::
+        :context: close-figs
+
+        >>> ax = sns.swarmplot(x="time", y="tip", data=tips, size=6)
+
+
+    Draw swarms of observations on top of a box plot:
+
+    .. plot::
+        :context: close-figs
+
+        >>> ax = sns.boxplot(x="tip", y="day", data=tips, whis=np.inf)
+        >>> ax = sns.swarmplot(x="tip", y="day", data=tips)
+
+    Draw swarms of observations on top of a violin plot:
+
+    .. plot::
+        :context: close-figs
+
         >>> ax = sns.violinplot(x="day", y="total_bill", data=tips, inner=None)
-        >>> ax = sns.stripplot(x="day", y="total_bill", data=tips,
-        ...                    jitter=True, color="white", edgecolor="gray")
+        >>> ax = sns.swarmplot(x="day", y="total_bill", data=tips,
+        ...                    color="white", edgecolor="gray")
 
     """).format(**_categorical_docs)
 
@@ -2166,7 +2877,7 @@ stripplot.__doc__ = dedent("""\
 def barplot(x=None, y=None, hue=None, data=None, order=None, hue_order=None,
             estimator=np.mean, ci=95, n_boot=1000, units=None,
             orient=None, color=None, palette=None, saturation=.75,
-            errcolor=".26", ax=None, **kwargs):
+            errcolor=".26", errwidth=None, capsize=None, ax=None, **kwargs):
 
     # Handle some deprecated arguments
     if "hline" in kwargs:
@@ -2185,7 +2896,7 @@ def barplot(x=None, y=None, hue=None, data=None, order=None, hue_order=None,
     plotter = _BarPlotter(x, y, hue, data, order, hue_order,
                           estimator, ci, n_boot, units,
                           orient, color, palette, saturation,
-                          errcolor)
+                          errcolor, errwidth, capsize)
 
     if ax is None:
         ax = plt.gca()
@@ -2219,7 +2930,7 @@ barplot.__doc__ = dedent("""\
     Parameters
     ----------
     {input_params}
-    {data}
+    {categorical_data}
     {order_vars}
     {stat_api_params}
     {orient}
@@ -2229,6 +2940,8 @@ barplot.__doc__ = dedent("""\
     errcolor : matplotlib color
         Color for the lines that represent the confidence interval.
     {ax_in}
+    {errwidth}
+    {capsize}
     kwargs : key, value mappings
         Other keyword arguments are passed through to ``plt.bar`` at draw
         time.
@@ -2270,20 +2983,13 @@ barplot.__doc__ = dedent("""\
 
         >>> ax = sns.barplot(x="tip", y="day", data=tips)
 
-    Control bar order by sorting the input data:
-
-    .. plot::
-        :context: close-figs
-
-        >>> ax = sns.barplot(x="size", y="tip", data=tips.sort("size"))
-
     Control bar order by passing an explicit order:
 
     .. plot::
         :context: close-figs
 
-        >>> ax = sns.barplot(x="size", y="tip", data=tips,
-        ...                  order=np.arange(1, 7), palette="Blues_d")
+        >>> ax = sns.barplot(x="time", y="tip", data=tips,
+        ...                  order=["Dinner", "Lunch"])
 
     Use median as the estimate of central tendency:
 
@@ -2300,12 +3006,19 @@ barplot.__doc__ = dedent("""\
 
         >>> ax = sns.barplot(x="day", y="tip", data=tips, ci=68)
 
+    Add "caps" to the error bars:
+
+    .. plot::
+        :context: close-figs
+
+        >>> ax = sns.barplot(x="day", y="tip", data=tips, capsize=.2)
+
     Use a different color palette for the bars:
 
     .. plot::
         :context: close-figs
 
-        >>> ax = sns.barplot("size", y="total_bill", data=tips.sort("size"),
+        >>> ax = sns.barplot("size", y="total_bill", data=tips,
         ...                  palette="Blues_d")
 
     Plot all bars in a single color:
@@ -2313,7 +3026,7 @@ barplot.__doc__ = dedent("""\
     .. plot::
         :context: close-figs
 
-        >>> ax = sns.barplot("size", y="total_bill", data=tips.sort("size"),
+        >>> ax = sns.barplot("size", y="total_bill", data=tips,
         ...                  color="salmon", saturation=.5)
 
     Use ``plt.bar`` keyword arguments to further change the aesthetic:
@@ -2331,7 +3044,8 @@ barplot.__doc__ = dedent("""\
 def pointplot(x=None, y=None, hue=None, data=None, order=None, hue_order=None,
               estimator=np.mean, ci=95, n_boot=1000, units=None,
               markers="o", linestyles="-", dodge=False, join=True, scale=1,
-              orient=None, color=None, palette=None, ax=None, **kwargs):
+              orient=None, color=None, palette=None, ax=None, errwidth=None,
+              capsize=None, **kwargs):
 
     # Handle some deprecated arguments
     if "hline" in kwargs:
@@ -2350,7 +3064,7 @@ def pointplot(x=None, y=None, hue=None, data=None, order=None, hue_order=None,
     plotter = _PointPlotter(x, y, hue, data, order, hue_order,
                             estimator, ci, n_boot, units,
                             markers, linestyles, dodge, join, scale,
-                            orient, color, palette)
+                            orient, color, palette, errwidth, capsize)
 
     if ax is None:
         ax = plt.gca()
@@ -2386,7 +3100,7 @@ pointplot.__doc__ = dedent("""\
     Parameters
     ----------
     {input_params}
-    {data}
+    {categorical_data}
     {order_vars}
     {stat_api_params}
     markers : string or list of strings, optional
@@ -2484,20 +3198,13 @@ pointplot.__doc__ = dedent("""\
         >>> ax = sns.pointplot(x="time", y="total_bill", hue="smoker",
         ...                    data=tips, palette="Set2")
 
-    Control point order by sorting the input data:
-
-    .. plot::
-        :context: close-figs
-
-        >>> ax = sns.pointplot(x="size", y="tip", data=tips.sort("size"))
-
     Control point order by passing an explicit order:
 
     .. plot::
         :context: close-figs
 
-        >>> ax = sns.pointplot(x="size", y="tip", data=tips,
-        ...                    order=np.arange(1, 7), palette="Blues_d")
+        >>> ax = sns.pointplot(x="time", y="tip", data=tips,
+        ...                    order=["Dinner", "Lunch"])
 
     Use median as the estimate of central tendency:
 
@@ -2513,6 +3220,13 @@ pointplot.__doc__ = dedent("""\
         :context: close-figs
 
         >>> ax = sns.pointplot(x="day", y="tip", data=tips, ci=68)
+
+    Add "caps" to the error bars:
+
+    .. plot::
+        :context: close-figs
+
+        >>> ax = sns.pointplot(x="day", y="tip", data=tips, capsize=.2)
 
     """).format(**_categorical_docs)
 
@@ -2536,7 +3250,7 @@ def countplot(x=None, y=None, hue=None, data=None, order=None, hue_order=None,
     elif x is not None and y is not None:
         raise TypeError("Cannot pass values for both `x` and `y`")
     else:
-        raise TypeError("Must pass valus for either `x` or `y`")
+        raise TypeError("Must pass values for either `x` or `y`")
 
     plotter = _BarPlotter(x, y, hue, data, order, hue_order,
                           estimator, ci, n_boot, units,
@@ -2564,7 +3278,7 @@ countplot.__doc__ = dedent("""\
     Parameters
     ----------
     {input_params}
-    {data}
+    {categorical_data}
     {order_vars}
     {orient}
     {color}
@@ -2666,6 +3380,8 @@ def factorplot(x=None, y=None, hue=None, data=None, row=None, col=None,
             x_, y_, orient = y, y, "h"
         elif y is None and x is not None:
             x_, y_, orient = x, x, "v"
+        else:
+            raise ValueError("Either `x` or `y` must be None for count plots")
     else:
         x_, y_ = x, y
 
@@ -2865,6 +3581,151 @@ factorplot.__doc__ = dedent("""\
         ...   .set_titles("{{col_name}} {{col_var}}")
         ...   .set(ylim=(0, 1))
         ...   .despine(left=True))  #doctest: +ELLIPSIS
+        <seaborn.axisgrid.FacetGrid object at 0x...>
+
+    """).format(**_categorical_docs)
+
+
+def lvplot(x=None, y=None, hue=None, data=None, order=None, hue_order=None,
+           orient=None, color=None, palette=None, saturation=.75,
+           width=.8, k_depth='proportion', linewidth=None, scale='exponential',
+           outlier_prop=None, ax=None, **kwargs):
+
+    plotter = _LVPlotter(x, y, hue, data, order, hue_order,
+                         orient, color, palette, saturation,
+                         width, k_depth, linewidth, scale, outlier_prop)
+
+    if ax is None:
+        ax = plt.gca()
+
+    plotter.plot(ax, kwargs)
+    return ax
+
+lvplot.__doc__ = dedent("""\
+    Create a letter value plot
+
+    Letter value (LV) plots are non-parametric estimates of the distribution of
+    a dataset, similar to boxplots. LV plots are also similar to violin plots
+    but without the need to fit a kernel density estimate. Thus, LV plots are
+    fast to generate, directly interpretable in terms of the distribution of
+    data, and easy to understand. For a more extensive explanation of letter
+    value plots and their properties, see Hadley Wickham's excellent paper on
+    the topic:
+
+    http://vita.had.co.nz/papers/letter-value-plot.html
+
+    {main_api_narrative}
+
+    Parameters
+    ----------
+    {input_params}
+    {categorical_data}
+    {order_vars}
+    {orient}
+    {color}
+    {palette}
+    {saturation}
+    {width}
+    k_depth : "proportion" | "tukey" | "trustworthy", optional
+        The number of boxes, and by extension number of percentiles, to draw.
+        All methods are detailed in Wickham's paper. Each makes different
+        assumptions about the number of outliers and leverages different
+        statistical properties.
+    {linewidth}
+    scale : "linear" | "exonential" | "area"
+        Method to use for the width of the letter value boxes. All give similar
+        results visually. "linear" reduces the width by a constant linear
+        factor, "exponential" uses the proportion of data not covered, "area"
+        is proportional to the percentage of data covered.
+    outlier_prop : float, optional
+        Proportion of data believed to be outliers. Is used in conjuction with
+        k_depth to determine the number of percentiles to draw. Defaults to
+        0.007 as a proportion of outliers. Should be in range [0, 1].
+    {ax_in}
+    kwargs : key, value mappings
+        Other keyword arguments are passed through to ``plt.plot`` and
+        ``plt.scatter`` at draw time.
+
+    Returns
+    -------
+    {ax_out}
+
+    See Also
+    --------
+    {violinplot}
+    {boxplot}
+
+    Examples
+    --------
+
+    Draw a single horizontal letter value plot:
+
+    .. plot::
+        :context: close-figs
+
+        >>> import seaborn as sns
+        >>> sns.set_style("whitegrid")
+        >>> tips = sns.load_dataset("tips")
+        >>> ax = sns.lvplot(x=tips["total_bill"])
+
+    Draw a vertical letter value plot grouped by a categorical variable:
+
+    .. plot::
+        :context: close-figs
+
+        >>> ax = sns.lvplot(x="day", y="total_bill", data=tips)
+
+    Draw a letter value plot with nested grouping by two categorical variables:
+
+    .. plot::
+        :context: close-figs
+
+        >>> ax = sns.lvplot(x="day", y="total_bill", hue="smoker",
+        ...                 data=tips, palette="Set3")
+
+    Draw a letter value plot with nested grouping when some bins are empty:
+
+    .. plot::
+        :context: close-figs
+
+        >>> ax = sns.lvplot(x="day", y="total_bill", hue="time",
+        ...                 data=tips, linewidth=2.5)
+
+    Control box order by passing an explicit order:
+
+    .. plot::
+        :context: close-figs
+
+        >>> ax = sns.lvplot(x="time", y="tip", data=tips,
+        ...                 order=["Dinner", "Lunch"])
+
+    Draw a letter value plot for each numeric variable in a DataFrame:
+
+    .. plot::
+        :context: close-figs
+
+        >>> iris = sns.load_dataset("iris")
+        >>> ax = sns.lvplot(data=iris, orient="h", palette="Set2")
+
+    Use :func:`stripplot` to show the datapoints on top of the boxes:
+
+    .. plot::
+        :context: close-figs
+
+        >>> ax = sns.lvplot(x="day", y="total_bill", data=tips)
+        >>> ax = sns.stripplot(x="day", y="total_bill", data=tips,
+        ...                    size=4, jitter=True, edgecolor="gray")
+
+    Draw a letter value plot on to a :class:`FacetGrid` to group within an
+    additional categorical variable:
+
+    .. plot::
+        :context: close-figs
+
+        >>> g = sns.FacetGrid(tips, col="time", size=4, aspect=.7)
+        >>> (g.map(sns.lvplot, "sex", "total_bill", "smoker")
+        ...   .despine(left=True)
+        ...   .add_legend(title="smoker"))  #doctest: +ELLIPSIS
         <seaborn.axisgrid.FacetGrid object at 0x...>
 
     """).format(**_categorical_docs)

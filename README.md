@@ -18,8 +18,8 @@ Seaborn: statistical data visualization
 <img src="http://stanford.edu/~mwaskom/software/seaborn/_static/regression_marginals_thumb.png" height="135" width="135">
 </a>
 
-<a href=http://stanford.edu/~mwaskom/software/seaborn/examples/violinplots.html>
-<img src="http://stanford.edu/~mwaskom/software/seaborn/_static/violinplots_thumb.png" height="135" width="135">
+<a href=http://stanford.edu/~mwaskom/software/seaborn/examples/grouped_violinplots.html>
+<img src="http://stanford.edu/~mwaskom/software/seaborn/_static/grouped_violinplots_thumb.png" height="135" width="135">
 </a>
 
 </div>
@@ -42,8 +42,7 @@ The documentation has an [example gallery](http://stanford.edu/~mwaskom/software
 Citing
 ------
 
-Seaborn can be cited using a DOI provided through Zenodo: [![DOI](https://zenodo.org/badge/doi/10.5072/zenodo.12710.png)](http://dx.doi.org/10.5072/zenodo.12710)
-
+Seaborn can be cited using a DOI provided through Zenodo: [![DOI](https://zenodo.org/badge/doi/10.5281/zenodo.45133.svg)](http://dx.doi.org/10.5281/zenodo.45133)
 
 Dependencies
 ------------

@@ -28,6 +28,11 @@ from .axisgrid import FacetGrid, PairGrid, _facet_docs
 from .distributions import kdeplot
 
 
+__all__ = ["lmplot", "regplot", "residplot",
+           "coefplot", "interactplot",
+           "pairplot"]
+
+
 class _LinearPlotter(object):
     """Base class for plotting relational data in tidy format.
 
@@ -313,6 +318,9 @@ class _RegressionPlotter(_LinearPlotter):
         else:
             color = self.color
 
+        # Ensure that color is hex to avoid matplotlib weidness
+        color = mpl.colors.rgb2hex(mpl.colors.colorConverter.to_rgb(color))
+
         # Let color in keyword arguments override overall plot color
         scatter_kws.setdefault("color", color)
         line_kws.setdefault("color", color)
@@ -376,7 +384,7 @@ class _RegressionPlotter(_LinearPlotter):
         # Draw the regression line and confidence interval
         ax.plot(grid, yhat, **kws)
         if err_bands is not None:
-            ax.fill_between(grid, *err_bands, color=fill_color, alpha=.15)
+            ax.fill_between(grid, *err_bands, facecolor=fill_color, alpha=.15)
         ax.set_xlim(*xlim)
 
 
@@ -557,8 +565,7 @@ def lmplot(x, y, data, hue=None, col=None, row=None, palette=None,
     # by the limits of the plot
     if sharex:
         for ax in facets.axes.flat:
-            scatter = ax.scatter(data[x], np.ones(len(data)) * data[y].mean())
-            scatter.remove()
+            ax.scatter(data[x], np.ones(len(data)) * data[y].mean()).remove()
 
     # Draw the regression plot on each facet
     regplot_kws = dict(

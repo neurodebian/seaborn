@@ -20,6 +20,9 @@ from .palettes import color_palette, blend_palette
 from .axisgrid import JointGrid
 
 
+__all__ = ["distplot", "kdeplot", "rugplot", "jointplot"]
+
+
 def _freedman_diaconis_bins(a):
     """Calculate number of hist bins using Freedman-Diaconis rule."""
     # From http://stats.stackexchange.com/questions/798/
@@ -27,9 +30,9 @@ def _freedman_diaconis_bins(a):
     h = 2 * iqr(a) / (len(a) ** (1 / 3))
     # fall back to sqrt(a) bins if iqr is 0
     if h == 0:
-        return np.sqrt(a.size)
+        return int(np.sqrt(a.size))
     else:
-        return np.ceil((a.max() - a.min()) / h)
+        return int(np.ceil((a.max() - a.min()) / h))
 
 
 def distplot(a, bins=None, hist=True, kde=True, rug=False, fit=None,
@@ -67,7 +70,7 @@ def distplot(a, bins=None, hist=True, kde=True, rug=False, fit=None,
         Color to plot everything but the fitted curve in.
     vertical : bool, optional
         If True, oberved values are on y-axis.
-    norm_hist : bool, otional
+    norm_hist : bool, optional
         If True, the histogram height shows a density rather than a count.
         This is implied if a KDE or fitted density is plotted.
     axlabel : string, False, or None, optional
@@ -306,9 +309,9 @@ def _univariate_kdeplot(data, shade, vertical, kernel, bw, gridsize, cut,
     alpha = kwargs.get("alpha", 0.25)
     if shade:
         if vertical:
-            ax.fill_betweenx(y, 1e-12, x, color=color, alpha=alpha)
+            ax.fill_betweenx(y, 1e-12, x, facecolor=color, alpha=alpha)
         else:
-            ax.fill_between(x, 1e-12, y, color=color, alpha=alpha)
+            ax.fill_between(x, 1e-12, y, facecolor=color, alpha=alpha)
 
     # Draw the legend here
     if legend:
@@ -342,7 +345,7 @@ def _scipy_univariate_kde(data, bw, gridsize, cut, clip):
             warnings.warn(msg, UserWarning)
     if isinstance(bw, string_types):
         bw = "scotts" if bw == "scott" else bw
-        bw = getattr(kde, "%s_factor" % bw)()
+        bw = getattr(kde, "%s_factor" % bw)() * np.std(data)
     grid = _kde_support(data, bw, gridsize, cut, clip)
     y = kde(grid)
     return grid, y
@@ -445,12 +448,12 @@ def kdeplot(data, data2=None, shade=False, vertical=False, kernel="gau",
     ----------
     data : 1d array-like
         Input data.
-    data2: 1d array-like
+    data2: 1d array-like, optional
         Second input data. If present, a bivariate KDE will be estimated.
     shade : bool, optional
         If True, shade in the area under the KDE curve (or draw with filled
         contours when data is bivariate).
-    vertical : bool
+    vertical : bool, optional
         If True, density is on x-axis.
     kernel : {'gau' | 'cos' | 'biw' | 'epa' | 'tri' | 'triw' }, optional
         Code for shape of kernel to fit with. Bivariate KDE can only use
@@ -465,11 +468,11 @@ def kdeplot(data, data2=None, shade=False, vertical=False, kernel="gau",
     clip : pair of scalars, or pair of pair of scalars, optional
         Lower and upper bounds for datapoints used to fit KDE. Can provide
         a pair of (low, high) bounds for bivariate plots.
-    legend : bool, optinal
+    legend : bool, optional
         If True, add a legend or label the axes when possible.
-    cumulative : bool
+    cumulative : bool, optional
         If True, draw the cumulative distribution estimated by the kde.
-    shade_lowest : bool
+    shade_lowest : bool, optional
         If True, shade the lowest contour of a bivariate KDE plot. Not
         relevant when drawing a univariate plot or when ``shade=False``.
         Setting this to ``False`` can be useful when you want multiple
@@ -614,9 +617,9 @@ def rugplot(a, height=.05, axis="x", ax=None, **kwargs):
         Height of ticks as proportion of the axis.
     axis : {'x' | 'y'}, optional
         Axis to draw rugplot on.
-    ax : matplotlib axes
+    ax : matplotlib axes, optional
         Axes to draw plot into; otherwise grabs current axes.
-    kwargs : key, value mappings
+    kwargs : key, value pairings
         Other keyword arguments are passed to ``axvline`` or ``axhline``.
 
     Returns
@@ -656,7 +659,7 @@ def jointplot(x, y, data=None, kind="scatter", stat_func=stats.pearsonr,
         DataFrame when ``x`` and ``y`` are variable names.
     kind : { "scatter" | "reg" | "resid" | "kde" | "hex" }, optional
         Kind of plot to draw.
-    stat_func : callable or None
+    stat_func : callable or None, optional
         Function used to calculate a statistic about the relationship and
         annotate the plot. Should map `x` and `y` either to a single value
         or to a (value, p) tuple. Set to ``None`` if you don't want to
@@ -673,9 +676,9 @@ def jointplot(x, y, data=None, kind="scatter", stat_func=stats.pearsonr,
         If True, remove observations that are missing from ``x`` and ``y``.
     {x, y}lim : two-tuples, optional
         Axis limits to set before plotting.
-    {joint, marginal, annot}_kws : dicts
+    {joint, marginal, annot}_kws : dicts, optional
         Additional keyword arguments for the plot components.
-    kwargs : key, value pairs
+    kwargs : key, value pairings
         Additional keyword arguments are passed to the function used to
         draw the plot on the joint Axes, superseding items in the
         ``joint_kws`` dictionary.

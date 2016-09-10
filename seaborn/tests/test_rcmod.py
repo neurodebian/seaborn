@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import nose.tools as nt
 import numpy.testing as npt
 
+from . import PlotTestCase
 from .. import rcmod
 
 
@@ -68,9 +69,16 @@ class TestAxesStyle(RCParamTester):
 
         rcmod.set_style("darkgrid")
         orig_params = rcmod.axes_style()
+        context_params = rcmod.axes_style("whitegrid")
+
         with rcmod.axes_style("whitegrid"):
-            context_params = rcmod.axes_style("whitegrid")
             self.assert_rc_params(context_params)
+        self.assert_rc_params(orig_params)
+
+        @rcmod.axes_style("whitegrid")
+        def func():
+            self.assert_rc_params(context_params)
+        func()
         self.assert_rc_params(orig_params)
 
     def test_style_context_independence(self):
@@ -133,7 +141,7 @@ class TestPlottingContext(RCParamTester):
         notebook_big = rcmod.plotting_context("notebook", 2)
 
         font_keys = ["axes.labelsize", "axes.titlesize", "legend.fontsize",
-                     "xtick.labelsize", "ytick.labelsize"]
+                     "xtick.labelsize", "ytick.labelsize", "font.size"]
 
         for k in font_keys:
             nt.assert_equal(notebook_ref[k] * 2, notebook_big[k])
@@ -158,13 +166,20 @@ class TestPlottingContext(RCParamTester):
 
         rcmod.set_context("notebook")
         orig_params = rcmod.plotting_context()
+        context_params = rcmod.plotting_context("paper")
+
         with rcmod.plotting_context("paper"):
-            context_params = rcmod.plotting_context("paper")
             self.assert_rc_params(context_params)
         self.assert_rc_params(orig_params)
 
+        @rcmod.plotting_context("paper")
+        def func():
+            self.assert_rc_params(context_params)
+        func()
+        self.assert_rc_params(orig_params)
 
-class TestFonts(object):
+
+class TestFonts(PlotTestCase):
 
     def test_set_font(self):
 
@@ -183,7 +198,6 @@ class TestFonts(object):
                 raise nose.SkipTest("Verdana font is not present")
         finally:
             rcmod.set()
-            plt.close("all")
 
     def test_set_serif_font(self):
 
@@ -196,7 +210,6 @@ class TestFonts(object):
                      mpl.rcParams["font.serif"])
 
         rcmod.set()
-        plt.close("all")
 
     def test_different_sans_serif(self):
 
@@ -220,7 +233,6 @@ class TestFonts(object):
                 raise nose.SkipTest("Verdana font is not present")
         finally:
             rcmod.set()
-            plt.close("all")
 
 
 def has_verdana():

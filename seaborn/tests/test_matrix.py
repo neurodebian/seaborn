@@ -13,6 +13,7 @@ import numpy.testing as npt
 import pandas.util.testing as pdt
 from numpy.testing.decorators import skipif
 
+from . import PlotTestCase
 from .. import matrix as mat
 from .. import color_palette
 from ..external.six.moves import range
@@ -26,7 +27,7 @@ except ImportError:
     _no_fastcluster = True
 
 
-class TestHeatmap(object):
+class TestHeatmap(PlotTestCase):
     rs = np.random.RandomState(sum(map(ord, "heatmap")))
 
     x_norm = rs.randn(4, 8)
@@ -185,10 +186,8 @@ class TestHeatmap(object):
         kws['xticklabels'] = False
         kws['yticklabels'] = False
         p = mat._HeatMapper(self.df_norm, **kws)
-        nt.assert_equal(p.xticklabels, ['' for _ in range(
-            self.df_norm.shape[1])])
-        nt.assert_equal(p.yticklabels, ['' for _ in range(
-            self.df_norm.shape[0])])
+        nt.assert_equal(p.xticklabels, [])
+        nt.assert_equal(p.yticklabels, [])
 
     def test_custom_ticklabels(self):
         kws = self.default_kws.copy()
@@ -223,7 +222,16 @@ class TestHeatmap(object):
         for val, text in zip(self.x_norm[::-1].flat, ax.texts):
             nt.assert_equal(text.get_text(), "{:.1f}".format(val))
             nt.assert_equal(text.get_fontsize(), 14)
-        plt.close("all")
+
+    def test_heatmap_annotation_overwrite_kws(self):
+
+        annot_kws = dict(color="0.3", va="bottom", ha="left")
+        ax = mat.heatmap(self.df_norm, annot=True, fmt=".1f",
+                         annot_kws=annot_kws)
+        for text in ax.texts:
+            nt.assert_equal(text.get_color(), "0.3")
+            nt.assert_equal(text.get_ha(), "left")
+            nt.assert_equal(text.get_va(), "bottom")
 
     def test_heatmap_annotation_with_mask(self):
 
@@ -236,7 +244,24 @@ class TestHeatmap(object):
         nt.assert_equal(len(df_masked[::-1].compressed()), len(ax.texts))
         for val, text in zip(df_masked[::-1].compressed(), ax.texts):
             nt.assert_equal("{:.1f}".format(val), text.get_text())
+
+    def test_heatmap_annotation_mesh_colors(self):
+
+        ax = mat.heatmap(self.df_norm, annot=True)
+        mesh = ax.collections[0]
+        nt.assert_equal(len(mesh.get_facecolors()), self.df_norm.values.size)
+
         plt.close("all")
+
+    def test_heatmap_annotation_other_data(self):
+        annot_data = self.df_norm + 10
+
+        ax = mat.heatmap(self.df_norm, annot=annot_data, fmt=".1f",
+                         annot_kws={"fontsize": 14})
+
+        for val, text in zip(annot_data.values[::-1].flat, ax.texts):
+            nt.assert_equal(text.get_text(), "{:.1f}".format(val))
+            nt.assert_equal(text.get_fontsize(), 14)
 
     def test_heatmap_cbar(self):
 
@@ -269,8 +294,6 @@ class TestHeatmap(object):
 
         nt.assert_equal(ax.get_xlim(), (0, 8))
         nt.assert_equal(ax.get_ylim(), (0, 4))
-
-        plt.close("all")
 
     def test_heatmap_ticklabel_rotation(self):
 
@@ -308,13 +331,10 @@ class TestHeatmap(object):
         nt.assert_equal(mesh.get_linewidths()[0], 2)
         nt.assert_equal(tuple(mesh.get_edgecolor()[0]), c)
 
-        plt.close("all")
-
     def test_square_aspect(self):
 
         ax = mat.heatmap(self.df_norm, square=True)
         nt.assert_equal(ax.get_aspect(), "equal")
-        plt.close("all")
 
     def test_mask_validation(self):
 
@@ -341,8 +361,18 @@ class TestHeatmap(object):
         mask_out = mat._matrix_mask(data, mask_in)
         npt.assert_array_equal(mask_out, [[True, True], [False, False]])
 
+    def test_cbar_ticks(self):
+        max_n_ticks = 3
 
-class TestDendrogram(object):
+        locator = mpl.ticker.MaxNLocator(max_n_ticks)
+        f, (ax1, ax2) = plt.subplots(2)
+        mat.heatmap(self.df_norm, ax=ax1, cbar_ax=ax2,
+                    cbar_kws=dict(ticks=locator))
+        nt.assert_equal(len(ax2.yaxis.get_ticklabels()), max_n_ticks)
+        plt.close(f)
+
+
+class TestDendrogram(PlotTestCase):
     rs = np.random.RandomState(sum(map(ord, "dendrogram")))
 
     x_norm = rs.randn(4, 8) + np.arange(8)
@@ -358,11 +388,9 @@ class TestDendrogram(object):
                                                     metric='euclidean',
                                                     method='single')
     except ImportError:
-        x_norm_distances = distance.squareform(
-            distance.pdist(x_norm.T, metric='euclidean'))
+        x_norm_distances = distance.pdist(x_norm.T, metric='euclidean')
         x_norm_linkage = hierarchy.linkage(x_norm_distances, method='single')
     x_norm_dendrogram = hierarchy.dendrogram(x_norm_linkage, no_plot=True,
-                                             color_list=['k'],
                                              color_threshold=-np.inf)
     x_norm_leaves = x_norm_dendrogram['leaves']
     df_norm_leaves = np.asarray(df_norm.columns[x_norm_leaves])
@@ -468,11 +496,9 @@ class TestDendrogram(object):
             linkage = fastcluster.linkage_vector(self.x_norm, method='single',
                                                  metric='euclidean')
         except ImportError:
-            d = distance.squareform(distance.pdist(self.x_norm,
-                                                   metric='euclidean'))
+            d = distance.pdist(self.x_norm, metric='euclidean')
             linkage = hierarchy.linkage(d, method='single')
         dendrogram = hierarchy.dendrogram(linkage, no_plot=True,
-                                          color_list=['k'],
                                           color_threshold=-np.inf)
         kws['linkage'] = linkage
         p = mat._DendrogramPlotter(self.df_norm, **kws)
@@ -499,9 +525,8 @@ class TestDendrogram(object):
         from scipy.spatial import distance
         from scipy.cluster import hierarchy
 
-        dists = distance.squareform(distance.pdist(self.x_norm.T,
-                                                   metric=self.default_kws[
-                                                       'metric']))
+        dists = distance.pdist(self.x_norm.T,
+                               metric=self.default_kws['metric'])
         linkage = hierarchy.linkage(dists, method=self.default_kws['method'])
 
         npt.assert_array_equal(scipy_linkage, linkage)
@@ -533,14 +558,15 @@ class TestDendrogram(object):
         d = mat.dendrogram(self.x_norm, **self.default_kws)
 
         ax = plt.gca()
-        d.xmin, d.xmax = ax.get_xlim()
-        xmax = min(map(min, d.X)) + max(map(max, d.X))
-        nt.assert_equal(d.xmin, 0)
-        nt.assert_equal(d.xmax, xmax)
+        xlim = ax.get_xlim()
+        # 10 comes from _plot_dendrogram in scipy.cluster.hierarchy
+        xmax = len(d.reordered_ind) * 10
 
-        nt.assert_equal(len(ax.get_lines()), len(d.X))
-        nt.assert_equal(len(ax.get_lines()), len(d.Y))
-        plt.close('all')
+        nt.assert_equal(xlim[0], 0)
+        nt.assert_equal(xlim[1], xmax)
+
+        nt.assert_equal(len(ax.collections[0].get_paths()),
+                        len(d.dependent_coord))
 
     def test_dendrogram_rotate(self):
         kws = self.default_kws.copy()
@@ -549,11 +575,15 @@ class TestDendrogram(object):
         d = mat.dendrogram(self.x_norm, **kws)
 
         ax = plt.gca()
-        d.ymin, d.ymax = ax.get_ylim()
-        ymax = min(map(min, d.Y)) + max(map(max, d.Y))
-        nt.assert_equal(d.ymin, 0)
-        nt.assert_equal(d.ymax, ymax)
-        plt.close('all')
+        ylim = ax.get_ylim()
+
+        # 10 comes from _plot_dendrogram in scipy.cluster.hierarchy
+        ymax = len(d.reordered_ind) * 10
+
+        # Since y axis is inverted, ylim is (80, 0)
+        # and therefore not (0, 80) as usual:
+        nt.assert_equal(ylim[1], 0)
+        nt.assert_equal(ylim[0], ymax)
 
     def test_dendrogram_ticklabel_rotation(self):
         f, ax = plt.subplots(figsize=(2, 2))
@@ -583,7 +613,7 @@ class TestDendrogram(object):
         plt.close(f)
 
 
-class TestClustermap(object):
+class TestClustermap(PlotTestCase):
     rs = np.random.RandomState(sum(map(ord, "clustermap")))
 
     x_norm = rs.randn(4, 8) + np.arange(8)
@@ -599,11 +629,9 @@ class TestClustermap(object):
                                                     metric='euclidean',
                                                     method='single')
     except ImportError:
-        x_norm_distances = distance.squareform(
-            distance.pdist(x_norm.T, metric='euclidean'))
+        x_norm_distances = distance.pdist(x_norm.T, metric='euclidean')
         x_norm_linkage = hierarchy.linkage(x_norm_distances, method='single')
     x_norm_dendrogram = hierarchy.dendrogram(x_norm_linkage, no_plot=True,
-                                             color_list=['k'],
                                              color_threshold=-np.inf)
     x_norm_leaves = x_norm_dendrogram['leaves']
     df_norm_leaves = np.asarray(df_norm.columns[x_norm_leaves])
@@ -626,13 +654,9 @@ class TestClustermap(object):
         nt.assert_equal(cm.ax_row_colors, None)
         nt.assert_equal(cm.ax_col_colors, None)
 
-        plt.close('all')
-
     def test_df_input(self):
         cm = mat.ClusterGrid(self.df_norm, **self.default_kws)
         pdt.assert_frame_equal(cm.data, self.df_norm)
-
-        plt.close('all')
 
     def test_corr_df_input(self):
         df = self.df_norm.corr()
@@ -640,8 +664,6 @@ class TestClustermap(object):
         cg.plot(**self.default_plot_kws)
         diag = cg.data2d.values[np.diag_indices_from(cg.data2d)]
         npt.assert_array_equal(diag, np.ones(cg.data2d.shape[0]))
-
-        plt.close('all')
 
     def test_pivot_input(self):
         df_norm = self.df_norm.copy()
@@ -655,8 +677,6 @@ class TestClustermap(object):
 
         pdt.assert_frame_equal(cm.data2d, df_norm)
 
-        plt.close('all')
-
     def test_colors_input(self):
         kws = self.default_kws.copy()
 
@@ -668,7 +688,6 @@ class TestClustermap(object):
         npt.assert_array_equal(cm.col_colors, self.col_colors)
 
         nt.assert_equal(len(cm.fig.axes), 6)
-        plt.close('all')
 
     def test_nested_colors_input(self):
         kws = self.default_kws.copy()
@@ -683,7 +702,6 @@ class TestClustermap(object):
         npt.assert_array_equal(cm.col_colors, col_colors)
 
         nt.assert_equal(len(cm.fig.axes), 6)
-        plt.close('all')
 
     def test_colors_input_custom_cmap(self):
         kws = self.default_kws.copy()
@@ -697,31 +715,26 @@ class TestClustermap(object):
         npt.assert_array_equal(cm.col_colors, self.col_colors)
 
         nt.assert_equal(len(cm.fig.axes), 6)
-        plt.close('all')
 
     def test_z_score(self):
         df = self.df_norm.copy()
-        df = (df - df.mean()) / df.var()
+        df = (df - df.mean()) / df.std()
         kws = self.default_kws.copy()
         kws['z_score'] = 1
 
         cm = mat.ClusterGrid(self.df_norm, **kws)
         pdt.assert_frame_equal(cm.data2d, df)
 
-        plt.close('all')
-
     def test_z_score_axis0(self):
         df = self.df_norm.copy()
         df = df.T
-        df = (df - df.mean()) / df.var()
+        df = (df - df.mean()) / df.std()
         df = df.T
         kws = self.default_kws.copy()
         kws['z_score'] = 0
 
         cm = mat.ClusterGrid(self.df_norm, **kws)
         pdt.assert_frame_equal(cm.data2d, df)
-
-        plt.close('all')
 
     def test_standard_scale(self):
         df = self.df_norm.copy()
@@ -731,8 +744,6 @@ class TestClustermap(object):
 
         cm = mat.ClusterGrid(self.df_norm, **kws)
         pdt.assert_frame_equal(cm.data2d, df)
-
-        plt.close('all')
 
     def test_standard_scale_axis0(self):
         df = self.df_norm.copy()
@@ -745,16 +756,12 @@ class TestClustermap(object):
         cm = mat.ClusterGrid(self.df_norm, **kws)
         pdt.assert_frame_equal(cm.data2d, df)
 
-        plt.close('all')
-
     def test_z_score_standard_scale(self):
         kws = self.default_kws.copy()
         kws['z_score'] = True
         kws['standard_scale'] = True
         with nt.assert_raises(ValueError):
             cm = mat.ClusterGrid(self.df_norm, **kws)
-
-        plt.close('all')
 
     def test_color_list_to_matrix_and_cmap(self):
         matrix, cmap = mat.ClusterGrid.color_list_to_matrix_and_cmap(
@@ -769,8 +776,6 @@ class TestClustermap(object):
         cmap_test = mpl.colors.ListedColormap(colors_set)
         npt.assert_array_equal(matrix, matrix_test)
         npt.assert_array_equal(cmap.colors, cmap_test.colors)
-
-        plt.close('all')
 
     def test_nested_color_list_to_matrix_and_cmap(self):
         colors = [self.col_colors, self.col_colors]
@@ -790,8 +795,6 @@ class TestClustermap(object):
         npt.assert_array_equal(matrix, matrix_test)
         npt.assert_array_equal(cmap.colors, cmap_test.colors)
 
-        plt.close('all')
-
     def test_color_list_to_matrix_and_cmap_axis1(self):
         matrix, cmap = mat.ClusterGrid.color_list_to_matrix_and_cmap(
             self.col_colors, self.x_norm_leaves, axis=1)
@@ -806,27 +809,22 @@ class TestClustermap(object):
         npt.assert_array_equal(matrix, matrix_test)
         npt.assert_array_equal(cmap.colors, cmap_test.colors)
 
-        plt.close('all')
-
     def test_savefig(self):
         # Not sure if this is the right way to test....
         cm = mat.ClusterGrid(self.df_norm, **self.default_kws)
         cm.plot(**self.default_plot_kws)
         cm.savefig(tempfile.NamedTemporaryFile(), format='png')
 
-        plt.close('all')
-
     def test_plot_dendrograms(self):
         cm = mat.clustermap(self.df_norm, **self.default_kws)
 
-        nt.assert_equal(len(cm.ax_row_dendrogram.get_lines()),
-                        len(cm.dendrogram_row.X))
-        nt.assert_equal(len(cm.ax_col_dendrogram.get_lines()),
-                        len(cm.dendrogram_col.X))
+        nt.assert_equal(len(cm.ax_row_dendrogram.collections[0].get_paths()),
+                        len(cm.dendrogram_row.independent_coord))
+        nt.assert_equal(len(cm.ax_col_dendrogram.collections[0].get_paths()),
+                        len(cm.dendrogram_col.independent_coord))
         data2d = self.df_norm.iloc[cm.dendrogram_row.reordered_ind,
                                    cm.dendrogram_col.reordered_ind]
         pdt.assert_frame_equal(cm.data2d, data2d)
-        plt.close('all')
 
     def test_cluster_false(self):
         kws = self.default_kws.copy()
@@ -843,7 +841,6 @@ class TestClustermap(object):
         nt.assert_equal(len(cm.ax_col_dendrogram.get_yticks()), 0)
 
         pdt.assert_frame_equal(cm.data2d, self.df_norm)
-        plt.close('all')
 
     def test_row_col_colors(self):
         kws = self.default_kws.copy()
@@ -854,8 +851,6 @@ class TestClustermap(object):
 
         nt.assert_equal(len(cm.ax_row_colors.collections), 1)
         nt.assert_equal(len(cm.ax_col_colors.collections), 1)
-
-        plt.close('all')
 
     def test_cluster_false_row_col_colors(self):
         kws = self.default_kws.copy()
@@ -876,7 +871,157 @@ class TestClustermap(object):
         nt.assert_equal(len(cm.ax_col_colors.collections), 1)
 
         pdt.assert_frame_equal(cm.data2d, self.df_norm)
-        plt.close('all')
+
+    def test_row_col_colors_df(self):
+        kws = self.default_kws.copy()
+        kws['row_colors'] = pd.DataFrame({'row_1': list(self.row_colors),
+                                          'row_2': list(self.row_colors)},
+                                         index=self.df_norm.index,
+                                         columns=['row_1', 'row_2'])
+        kws['col_colors'] = pd.DataFrame({'col_1': list(self.col_colors),
+                                          'col_2': list(self.col_colors)},
+                                         index=self.df_norm.columns,
+                                         columns=['col_1', 'col_2'])
+
+        cm = mat.clustermap(self.df_norm, **kws)
+
+        row_labels = [l.get_text() for l in
+                      cm.ax_row_colors.get_xticklabels()]
+        nt.assert_equal(cm.row_color_labels, ['row_1', 'row_2'])
+        nt.assert_equal(row_labels, cm.row_color_labels)
+
+        col_labels = [l.get_text() for l in
+                      cm.ax_col_colors.get_yticklabels()]
+        nt.assert_equal(cm.col_color_labels, ['col_1', 'col_2'])
+        nt.assert_equal(col_labels[::-1], cm.col_color_labels)
+
+    def test_row_col_colors_df_shuffled(self):
+        # Tests if colors are properly matched, even if given in wrong order
+
+        m, n = self.df_norm.shape
+        shuffled_inds = [self.df_norm.index[i] for i in
+                         list(range(0, m, 2)) + list(range(1, m, 2))]
+        shuffled_cols = [self.df_norm.columns[i] for i in
+                         list(range(0, n, 2)) + list(range(1, n, 2))]
+
+        kws = self.default_kws.copy()
+
+        row_colors = pd.DataFrame({'row_annot': list(self.row_colors)},
+                                  index=self.df_norm.index)
+        kws['row_colors'] = row_colors.ix[shuffled_inds]
+
+        col_colors = pd.DataFrame({'col_annot': list(self.col_colors)},
+                                  index=self.df_norm.columns)
+        kws['col_colors'] = col_colors.ix[shuffled_cols]
+
+        cm = mat.clustermap(self.df_norm, **kws)
+        nt.assert_equal(list(cm.col_colors)[0], list(self.col_colors))
+        nt.assert_equal(list(cm.row_colors)[0], list(self.row_colors))
+
+    def test_row_col_colors_df_missing(self):
+        kws = self.default_kws.copy()
+        row_colors = pd.DataFrame({'row_annot': list(self.row_colors)},
+                                  index=self.df_norm.index)
+        kws['row_colors'] = row_colors.drop(self.df_norm.index[0])
+
+        col_colors = pd.DataFrame({'col_annot': list(self.col_colors)},
+                                  index=self.df_norm.columns)
+        kws['col_colors'] = col_colors.drop(self.df_norm.columns[0])
+
+        cm = mat.clustermap(self.df_norm, **kws)
+
+        nt.assert_equal(list(cm.col_colors)[0],
+                        [(1.0, 1.0, 1.0)] + list(self.col_colors[1:]))
+        nt.assert_equal(list(cm.row_colors)[0],
+                        [(1.0, 1.0, 1.0)] + list(self.row_colors[1:]))
+
+    def test_row_col_colors_df_one_axis(self):
+        # Test case with only row annotation.
+        kws1 = self.default_kws.copy()
+        kws1['row_colors'] = pd.DataFrame({'row_1': list(self.row_colors),
+                                           'row_2': list(self.row_colors)},
+                                          index=self.df_norm.index,
+                                          columns=['row_1', 'row_2'])
+
+        cm1 = mat.clustermap(self.df_norm, **kws1)
+
+        row_labels = [l.get_text() for l in
+                      cm1.ax_row_colors.get_xticklabels()]
+        nt.assert_equal(cm1.row_color_labels, ['row_1', 'row_2'])
+        nt.assert_equal(row_labels, cm1.row_color_labels)
+
+        # Test case with onl col annotation.
+        kws2 = self.default_kws.copy()
+        kws2['col_colors'] = pd.DataFrame({'col_1': list(self.col_colors),
+                                           'col_2': list(self.col_colors)},
+                                          index=self.df_norm.columns,
+                                          columns=['col_1', 'col_2'])
+
+        cm2 = mat.clustermap(self.df_norm, **kws2)
+
+        col_labels = [l.get_text() for l in
+                      cm2.ax_col_colors.get_yticklabels()]
+        nt.assert_equal(cm2.col_color_labels, ['col_1', 'col_2'])
+        nt.assert_equal(col_labels[::-1], cm2.col_color_labels)
+
+    def test_row_col_colors_series(self):
+        kws = self.default_kws.copy()
+        kws['row_colors'] = pd.Series(list(self.row_colors), name='row_annot',
+                                      index=self.df_norm.index)
+        kws['col_colors'] = pd.Series(list(self.col_colors), name='col_annot',
+                                      index=self.df_norm.columns)
+
+        cm = mat.clustermap(self.df_norm, **kws)
+
+        row_labels = [l.get_text() for l in
+                      cm.ax_row_colors.get_xticklabels()]
+        nt.assert_equal(cm.row_color_labels, ['row_annot'])
+        nt.assert_equal(row_labels, cm.row_color_labels)
+
+        col_labels = [l.get_text() for l in
+                      cm.ax_col_colors.get_yticklabels()]
+        nt.assert_equal(cm.col_color_labels, ['col_annot'])
+        nt.assert_equal(col_labels, cm.col_color_labels)
+
+    def test_row_col_colors_series_shuffled(self):
+        # Tests if colors are properly matched, even if given in wrong order
+
+        m, n = self.df_norm.shape
+        shuffled_inds = [self.df_norm.index[i] for i in
+                         list(range(0, m, 2)) + list(range(1, m, 2))]
+        shuffled_cols = [self.df_norm.columns[i] for i in
+                         list(range(0, n, 2)) + list(range(1, n, 2))]
+
+        kws = self.default_kws.copy()
+
+        row_colors = pd.Series(list(self.row_colors), name='row_annot',
+                               index=self.df_norm.index)
+        kws['row_colors'] = row_colors.ix[shuffled_inds]
+
+        col_colors = pd.Series(list(self.col_colors), name='col_annot',
+                               index=self.df_norm.columns)
+        kws['col_colors'] = col_colors.ix[shuffled_cols]
+
+        cm = mat.clustermap(self.df_norm, **kws)
+
+        nt.assert_equal(list(cm.col_colors), list(self.col_colors))
+        nt.assert_equal(list(cm.row_colors), list(self.row_colors))
+
+    def test_row_col_colors_series_missing(self):
+        kws = self.default_kws.copy()
+        row_colors = pd.Series(list(self.row_colors), name='row_annot',
+                               index=self.df_norm.index)
+        kws['row_colors'] = row_colors.drop(self.df_norm.index[0])
+
+        col_colors = pd.Series(list(self.col_colors), name='col_annot',
+                               index=self.df_norm.columns)
+        kws['col_colors'] = col_colors.drop(self.df_norm.columns[0])
+
+        cm = mat.clustermap(self.df_norm, **kws)
+        nt.assert_equal(list(cm.col_colors),
+                        [(1.0, 1.0, 1.0)] + list(self.col_colors[1:]))
+        nt.assert_equal(list(cm.row_colors),
+                        [(1.0, 1.0, 1.0)] + list(self.row_colors[1:]))
 
     def test_mask_reorganization(self):
 
@@ -893,8 +1038,6 @@ class TestClustermap(object):
         npt.assert_array_equal(g.mask.columns,
                                self.df_norm.columns[
                                    g.dendrogram_col.reordered_ind])
-
-        plt.close("all")
 
     def test_ticklabel_reorganization(self):
 
@@ -914,5 +1057,3 @@ class TestClustermap(object):
 
         npt.assert_array_equal(xtl_actual, xtl_want)
         npt.assert_array_equal(ytl_actual, ytl_want)
-
-        plt.close("all")

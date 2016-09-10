@@ -9,10 +9,11 @@ import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
-from six import string_types
-
 from . import utils
 from .palettes import color_palette
+
+
+__all__ = ["FacetGrid", "PairGrid", "JointGrid"]
 
 
 class Grid(object):
@@ -146,7 +147,7 @@ class Grid(object):
 
             # By default use either the current color palette or HUSL
             if palette is None:
-                current_palette = mpl.rcParams["axes.color_cycle"]
+                current_palette = utils.get_color_cycle()
                 if n_colors > len(current_palette):
                     colors = color_palette("husl", n_colors)
                 else:
@@ -179,7 +180,7 @@ _facet_docs = dict(
         span multiple rows. Incompatible with a ``row`` facet.\
     """),
     share_xy=dedent("""\
-    share_{x,y} : bool, optional
+    share{x,y} : bool, optional
         If true, the facets will share y axes across columns and/or x axes
         across rows.\
     """),
@@ -270,7 +271,7 @@ class FacetGrid(Grid):
                 err = "Cannot use `row` and `col_wrap` together."
                 raise ValueError(err)
             ncol = col_wrap
-            nrow = int(np.ceil(len(data[col].unique()) / col_wrap))
+            nrow = int(np.ceil(len(col_names) / col_wrap))
         self._ncol = ncol
         self._nrow = nrow
 
@@ -573,7 +574,8 @@ class FacetGrid(Grid):
             >>> df = pd.DataFrame(
             ...     data=np.random.randn(90, 4),
             ...     columns=pd.Series(list("ABCD"), name="walk"),
-            ...     index=pd.date_range("Jan 1", "March 31", name="date"))
+            ...     index=pd.date_range("2015-01-01", "2015-03-31",
+            ...                         name="date"))
             >>> df = df.cumsum(axis=0).stack().reset_index(name="val")
             >>> def dateplot(x, y, **kwargs):
             ...     ax = plt.gca()
@@ -606,7 +608,7 @@ class FacetGrid(Grid):
         .. plot::
             :context: close-figs
 
-            >>> g = sns.FacetGrid(tips.sort("size"), col="size", col_wrap=3)
+            >>> g = sns.FacetGrid(tips, col="size", col_wrap=3)
             >>> g = (g.map(plt.hist, "tip", bins=np.arange(0, 13), color="c")
             ...       .set_titles("{{col_name}} diners"))
 
@@ -694,7 +696,7 @@ class FacetGrid(Grid):
         for (row_i, col_j, hue_k), data_ijk in self.facet_data():
 
             # If this subset is null, move on
-            if not data_ijk.values.tolist():
+            if not data_ijk.values.size:
                 continue
 
             # Get the current axis
@@ -766,7 +768,7 @@ class FacetGrid(Grid):
         for (row_i, col_j, hue_k), data_ijk in self.facet_data():
 
             # If this subset is null, move on
-            if not data_ijk.values.tolist():
+            if not data_ijk.values.size:
                 continue
 
             # Get the current axis
@@ -921,6 +923,10 @@ class FacetGrid(Grid):
                 template = row_template
             else:
                 template = " | ".join([row_template, col_template])
+
+        row_template = utils.to_utf8(row_template)
+        col_template = utils.to_utf8(col_template)
+        template = utils.to_utf8(template)
 
         if self._margin_titles:
             if self.row_names is not None:
@@ -1120,7 +1126,18 @@ class PairGrid(Grid):
             :context: close-figs
 
             >>> g = sns.PairGrid(iris, hue="species")
-            >>> g = g.map(plt.scatter)
+            >>> g = g.map_diag(plt.hist)
+            >>> g = g.map_offdiag(plt.scatter)
+            >>> g = g.add_legend()
+
+        Use a different style to show multiple histograms:
+
+        .. plot::
+            :context: close-figs
+
+            >>> g = sns.PairGrid(iris, hue="species")
+            >>> g = g.map_diag(plt.hist, histtype="step", linewidth=3)
+            >>> g = g.map_offdiag(plt.scatter)
             >>> g = g.add_legend()
 
         Plot a subset of variables
@@ -1322,8 +1339,13 @@ class PairGrid(Grid):
                         vals.append(np.asarray(hue_grouped.get_group(label)))
                     except KeyError:
                         vals.append(np.array([]))
-                func(vals, color=self.palette, histtype="barstacked",
-                     **kwargs)
+
+                # check and see if histtype override was provided in kwargs
+                if 'histtype' in kwargs:
+                    func(vals, color=self.palette, **kwargs)
+                else:
+                    func(vals, color=self.palette, histtype="barstacked",
+                         **kwargs)
             else:
                 for k, label_k in enumerate(self.hue_names):
                     # Attempt to get data for this level, allowing for empty

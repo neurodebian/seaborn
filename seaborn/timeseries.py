@@ -8,10 +8,12 @@ import matplotlib.pyplot as plt
 
 from .external.six import string_types
 
-
 from . import utils
 from . import algorithms as algo
 from .palettes import color_palette
+
+
+__all__ = ["tsplot"]
 
 
 def tsplot(data, time=None, unit=None, condition=None, value=None,
@@ -60,7 +62,7 @@ def tsplot(data, time=None, unit=None, condition=None, value=None,
         {ci_band, ci_bars, boot_traces, boot_kde, unit_traces, unit_points}.
         Can use one or more than one method.
     ci : float or list of floats in [0, 100]
-        Confidence interaval size(s). If a list, it will stack the error
+        Confidence interval size(s). If a list, it will stack the error
         plots for each confidence interval. Only relevant for error styles
         with "ci" in the name.
     interpolate : boolean
@@ -257,7 +259,7 @@ def tsplot(data, time=None, unit=None, condition=None, value=None,
 
     # Set up the color palette
     if color is None:
-        current_palette = mpl.rcParams["axes.color_cycle"]
+        current_palette = utils.get_color_cycle()
         if len(current_palette) < n_cond:
             colors = color_palette("husl", n_cond)
         else:
@@ -350,7 +352,7 @@ def _plot_ci_band(ax, x, ci, color, err_kws, **kwargs):
     low, high = ci
     if "alpha" not in err_kws:
         err_kws["alpha"] = 0.2
-    ax.fill_between(x, low, high, color=color, **err_kws)
+    ax.fill_between(x, low, high, facecolor=color, **err_kws)
 
 
 def _plot_ci_bars(ax, x, central_data, ci, color, err_kws, **kwargs):

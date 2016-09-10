@@ -5,6 +5,7 @@ import shutil
 
 import numpy as np
 import pandas as pd
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import nose
 import nose.tools as nt
@@ -16,14 +17,15 @@ from distutils.version import LooseVersion
 pandas_has_categoricals = LooseVersion(pd.__version__) >= "0.15"
 
 from pandas.util.testing import network
-from ..utils import get_dataset_names, load_dataset
 
 try:
     from bs4 import BeautifulSoup
 except ImportError:
     BeautifulSoup = None
 
+from . import PlotTestCase
 from .. import utils, rcmod
+from ..utils import get_dataset_names, load_dataset
 
 
 a_norm = np.random.randn(100)
@@ -109,7 +111,15 @@ def test_iqr():
     assert_equal(iqr, 2)
 
 
-class TestSpineUtils(object):
+def test_str_to_utf8():
+    """Test the to_utf8 function: string to Unicode"""
+    s = "\u01ff\u02ff"
+    u = utils.to_utf8(s)
+    assert_equal(type(s), type(str()))
+    assert_equal(type(u), type(u"\u01ff\u02ff"))
+
+
+class TestSpineUtils(PlotTestCase):
 
     sides = ["left", "right", "bottom", "top"]
     outer_sides = ["top", "right"]
@@ -134,8 +144,6 @@ class TestSpineUtils(object):
         for side in self.sides:
             nt.assert_true(~ax.spines[side].get_visible())
 
-        plt.close("all")
-
     def test_despine_specific_axes(self):
         f, (ax1, ax2) = plt.subplots(2, 1)
 
@@ -148,8 +156,6 @@ class TestSpineUtils(object):
             nt.assert_true(~ax2.spines[side].get_visible())
         for side in self.inner_sides:
             nt.assert_true(ax2.spines[side].get_visible())
-
-        plt.close("all")
 
     def test_despine_with_offset(self):
         f, ax = plt.subplots()
@@ -168,8 +174,6 @@ class TestSpineUtils(object):
             else:
                 nt.assert_equal(new_position, self.original_position)
 
-        plt.close("all")
-
     def test_despine_with_offset_specific_axes(self):
         f, (ax1, ax2) = plt.subplots(2, 1)
 
@@ -184,7 +188,6 @@ class TestSpineUtils(object):
             else:
                 nt.assert_equal(ax2.spines[side].get_position(),
                                 self.original_position)
-        plt.close("all")
 
     def test_despine_trim_spines(self):
         f, ax = plt.subplots()
@@ -195,8 +198,6 @@ class TestSpineUtils(object):
         for side in self.inner_sides:
             bounds = ax.spines[side].get_bounds()
             nt.assert_equal(bounds, (1, 3))
-
-        plt.close("all")
 
     def test_despine_trim_inverted(self):
 
@@ -209,8 +210,6 @@ class TestSpineUtils(object):
         for side in self.inner_sides:
             bounds = ax.spines[side].get_bounds()
             nt.assert_equal(bounds, (1, 3))
-
-        plt.close("all")
 
     def test_despine_trim_noticks(self):
 
@@ -229,8 +228,6 @@ class TestSpineUtils(object):
             nt.assert_true('deprecated' in str(w[0].message))
             nt.assert_true(issubclass(w[0].category, UserWarning))
 
-        plt.close('all')
-
     def test_offset_spines(self):
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always", category=UserWarning)
@@ -246,8 +243,6 @@ class TestSpineUtils(object):
                 nt.assert_equal(ax.spines[side].get_position(),
                                 self.offset_position)
 
-        plt.close("all")
-
     def test_offset_spines_specific_axes(self):
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always", category=UserWarning)
@@ -260,7 +255,6 @@ class TestSpineUtils(object):
                                 self.original_position)
                 nt.assert_equal(ax2.spines[side].get_position(),
                                 self.offset_position)
-        plt.close("all")
 
 
 def test_ticklabels_overlap():
@@ -286,6 +280,7 @@ def test_ticklabels_overlap():
 def test_categorical_order():
 
     x = ["a", "c", "c", "b", "a", "d"]
+    y = [3, 2, 5, 1, 4]
     order = ["a", "b", "c", "d"]
 
     out = utils.categorical_order(x)
@@ -302,6 +297,15 @@ def test_categorical_order():
 
     out = utils.categorical_order(pd.Series(x))
     nt.assert_equal(out, ["a", "c", "b", "d"])
+
+    out = utils.categorical_order(y)
+    nt.assert_equal(out, [1, 2, 3, 4, 5])
+
+    out = utils.categorical_order(np.array(y))
+    nt.assert_equal(out, [1, 2, 3, 4, 5])
+
+    out = utils.categorical_order(pd.Series(y))
+    nt.assert_equal(out, [1, 2, 3, 4, 5])
 
     if pandas_has_categoricals:
         x = pd.Categorical(x, order)
@@ -373,3 +377,22 @@ if LooseVersion(pd.__version__) >= "0.15":
             # does not get in effect, so we need to call explicitly
             # yield check_load_dataset, name
             check_load_cached_dataset(name)
+
+
+def test_relative_luminance():
+    """Test relative luminance."""
+    out1 = utils.relative_luminance("white")
+    assert_equal(out1, 1)
+
+    out2 = utils.relative_luminance("#000000")
+    assert_equal(out2, 0)
+
+    out3 = utils.relative_luminance((.25, .5, .75))
+    nose.tools.assert_almost_equal(out3, 0.201624536)
+
+    rgbs = mpl.cm.RdBu(np.linspace(0, 1, 10))
+    lums1 = [utils.relative_luminance(rgb) for rgb in rgbs]
+    lums2 = utils.relative_luminance(rgbs)
+
+    for lum1, lum2 in zip(lums1, lums2):
+        nose.tools.assert_almost_equal(lum1, lum2)
