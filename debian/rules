@@ -5,11 +5,21 @@ DH_VERBOSE=1
 export PYBUILD_NAME=seaborn
 export PYBUILD_TEST_NOSE=1
 
+export MPLCONFIGDIR=$(CURDIR)/build
+export HOME=$(CURDIR)/build
+
 export  http_proxy=http://127.0.0.1:9/
 export  https_proxy=http://127.0.0.1:9/
 
 %:
 	dh $@ --with python2,python3 --buildsystem=pybuild
+
+# Assure Agg backend for matplotlib to avoid any possible complication
+# and failed unittests, as in #802412
+override_dh_auto_configure:
+	mkdir -p $(MPLCONFIGDIR)
+	echo "backend : Agg" >| $(MPLCONFIGDIR)/matplotlibrc
+	dh_auto_configure
 
 override_dh_auto_test:
 	xvfb-run --auto-servernum --server-num=20 dh_auto_test $@

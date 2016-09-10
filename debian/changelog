@@ -1,9 +1,11 @@
 seaborn (0.7.1-1) unstable; urgency=medium
 
   * Fresh upstream release
-    - should Closes: #802412
+  * debian/rules
+    - set mpl backed to Agg to robustify testing and resolving FTBFS
+      (Closes: #802412)
 
- -- Yaroslav Halchenko <debian@onerussian.com>  Sat, 10 Sep 2016 14:56:53 -0400
+ -- Yaroslav Halchenko <debian@onerussian.com>  Sat, 10 Sep 2016 15:03:38 -0400
 
 seaborn (0.6.0-1) unstable; urgency=medium
 
